@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta content="06e4d4150eb35be7b85b1c32ff882b37" name="monetag">
+  <script async data-cfasync="false" data-zone="212585" src="https://quge5.com/88/tag.min.js"></script>
+  <meta charset="UTF-8">
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+  
+  <title>I-SHARK Aspirants</title>
+  <meta content="I-SHARK Aspirants" name="application-name">
+  <meta content="yes" name="apple-mobile-web-app-capable">
+  <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style">
+  <meta content="#0F2027" name="theme-color">
+
+  <script defer src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(function(OneSignal) {
+      OneSignal.init({
+        appId: "9b791672-633c-45d9-bcde-9fb9d4144ba3",
+        notifyButton: { enable: true },
+      });
+    });
+    tailwind.config = { darkMode: 'class' };
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap');
+    
+    body { 
+        font-family: 'Inter', sans-serif; 
+        margin: 0; padding: 0; 
+        background: linear-gradient(to bottom right, #0F2027, #203A43, #2C5364);
+        background-attachment: fixed;
+        color: #ffffff;
+        min-height: 100vh;
+    }
+    .urdu-text { font-family: 'Noto Nastaliq Urdu', serif; direction: rtl; line-height: 2; }
+    
+    .glass-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    }
+    .glass-nav {
+        background: rgba(15, 32, 39, 0.8);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .glass-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.2s;
+    }
+    .glass-btn:active { transform: scale(0.95); }
+
+    .loader { border-top-color: #4FC3F7; animation: spinner 1.5s linear infinite; }
+    @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .hidden-view { display: none !important; }
+    .ad-slot { width: 100%; min-height: 100px; background: rgba(0,0,0,0.2); border: 2px dashed rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); border-radius: 8px; margin: 1rem 0; }
+    
+    /* Animation for Instant Feedback */
+    .correct-answer { background-color: rgba(34, 197, 94, 0.3) !important; border-color: #22c55e !important; }
+    .wrong-answer { background-color: rgba(239, 68, 68, 0.3) !important; border-color: #ef4444 !important; }
+  </style>
+</head>
+<body>
+
+  <div class="min-h-screen flex flex-col relative" id="app">
+    
+    <div class="fixed inset-0 bg-black/90 z-[100] hidden flex-col items-center pt-20 px-4 backdrop-blur-md" id="search-overlay">
+        <div class="w-full max-w-3xl relative">
+            <input class="w-full p-4 rounded-xl text-lg glass-card text-white placeholder-gray-400 outline-none" id="search-input" oninput="handleSearch(this.value)" placeholder="Search MCQs / تلاش کریں..." type="text">
+            <button class="absolute right-4 top-4 text-gray-400 hover:text-white" onclick="toggleSearch()">&#10005;</button>
+        </div>
+        <div class="w-full max-w-3xl mt-4 space-y-3 overflow-y-auto max-h-[70vh]" id="search-results"></div>
+    </div>
+
+    <nav class="glass-nav sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex flex-col justify-center cursor-pointer" onclick="router('home')">
+            <div class="flex items-center">
+                 <span class="text-xl sm:text-2xl font-bold text-cyan-400 tracking-tight">I-SHARK<span class="text-white ml-1">Aspirants</span></span>
+            </div>
+            <span class="text-[10px] text-gray-400 -mt-1 uppercase tracking-wider hidden md:block">Powered by I-SHARK Institute</span>
+          </div>
+          
+          <div class="flex items-center space-x-2">
+            <div class="hidden text-white text-xs mr-2 font-bold" id="user-info-desktop"></div>
+            <button class="hidden bg-cyan-500/20 text-cyan-300 px-3 py-1 rounded-full text-xs font-bold border border-cyan-500/30" id="btn-install" onclick="installApp()">📱 APP</button>
+            <button class="p-2 text-gray-300 hover:text-white" onclick="toggleSearch()">🔍</button>
+            <button class="p-2 text-gray-300 hover:text-white" onclick="toggleMobileMenu()">&#9776;</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden absolute top-16 right-0 left-0 glass-nav border-t border-gray-700 px-4 pt-2 pb-4 space-y-2 shadow-xl z-40" id="mobile-menu">
+         <div class="hidden p-3 bg-white/5 rounded-lg flex items-center space-x-2 mb-2" id="user-info-mobile">
+             <span class="text-xl">👤</span>
+             <span class="font-bold text-white" id="user-name-mobile">User</span>
+         </div>
+         <button class="w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-200 hover:bg-white/10" onclick="router('bookmarks'); toggleMobileMenu()">&#11088; Saved / محفوظ شدہ</button>
+         <button class="w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-200 hover:bg-white/10" onclick="router('downloads'); toggleMobileMenu()">📥 Library / کتب خانہ</button>
+         <button class="w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-200 hover:bg-white/10" onclick="router('history'); toggleMobileMenu()">📊 My Progress</button>
+         <button class="w-full mt-2 bg-cyan-600 text-white px-3 py-3 rounded-lg font-bold text-center" id="auth-btn-mobile" onclick="handleAuth()">Login</button>
+      </div>
+    </nav>
+
+    <main class="flex-grow container mx-auto px-4 py-6 max-w-6xl">
+      
+      <div class="flex flex-col justify-center items-center h-64" id="view-loading">
+        <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-500 h-12 w-12 mb-4"></div>
+        <p class="text-cyan-400 text-sm animate-pulse mt-4 font-bold">INITIALIZING VAULT...</p>
+      </div>
+
+      <div class="hidden-view space-y-6" id="view-home">
+        <div class="glass-card p-6 relative overflow-hidden">
+           <div class="absolute top-0 right-0 opacity-10 text-9xl font-bold urdu-text pr-4 -mt-4 text-cyan-200">عزم</div> 
+           <div class="relative z-10 grid grid-cols-2 gap-4 items-center">
+              <div>
+                  <p class="text-cyan-300 text-xs font-bold uppercase tracking-widest mb-1">Current Rank</p>
+                  <h1 class="text-3xl font-bold text-white mb-2" id="user-rank">Beginner</h1>
+                  <div class="flex items-center space-x-2 text-sm text-gray-300 mb-2">
+                      <span class="bg-white/10 px-2 py-0.5 rounded text-xs font-mono" id="user-xp">0 XP</span>
+                      <span>Target: <span id="xp-next">100</span></span>
+                  </div>
+                  <div class="w-full bg-black/30 h-2 rounded-full overflow-hidden">
+                      <div class="h-full bg-cyan-400" id="xp-bar" style="width: 0%"></div>
+                  </div>
+              </div>
+              <div class="text-right border-l border-white/10 pl-4">
+                  <div class="flex flex-col items-end">
+                      <span class="text-4xl">🔥</span>
+                      <span class="text-2xl font-bold text-white" id="user-streak">0</span>
+                      <span class="text-xs text-gray-400 uppercase tracking-widest">Streak</span>
+                  </div>
+              </div>
+           </div>
+        </div>
+
+        <div class="glass-card p-4 text-center">
+            <p class="italic text-gray-300 text-sm" id="daily-quote">"Success is the sum of small efforts, repeated day in and day out."</p>
+        </div>
+        
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="glass-card p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/10 transition" onclick="router('subjects')">
+                <span class="text-3xl mb-2">📚</span>
+                <span class="font-bold text-white text-sm">Subject Bank</span>
+            </div>
+            <div class="glass-card p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/10 transition relative" onclick="startMockExam()">
+                <div class="absolute top-2 right-2 bg-yellow-500 text-white text-[9px] font-bold px-2 py-0.5 rounded">PRO</div>
+                <span class="text-3xl mb-2">📝</span>
+                <span class="font-bold text-white text-sm">Grand Mock</span>
+            </div>
+            <a class="glass-card p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-green-500/20 transition border-green-500/30" href="https://wa.me/?text=Salam!%20I%20am%20interested%20in%20Online%20Classes." target="_blank">
+                <span class="text-3xl mb-2">🎓</span>
+                <span class="font-bold text-white text-sm">Online Classes</span>
+            </a>
+            <div class="glass-card p-4 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/10 transition relative" onclick="startMistakeQuiz()">
+                <div class="hidden absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full animate-pulse" id="mistake-badge"></div>
+                <span class="text-3xl mb-2">&#9888;&#65039;</span>
+                <span class="font-bold text-white text-sm">Fix Mistakes</span>
+            </div>
+        </div>
+        
+        <div class="ad-slot" id="ad-dashboard"><span class="opacity-50">Advertisement Space</span></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="glass-card p-6">
+             <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                <span class="bg-white/10 p-1.5 rounded mr-2 text-xs">🕒</span> Your Journey
+             </h3>
+             <div class="space-y-4" id="activity-feed">
+                 <div class="text-center text-gray-400 text-sm py-4">No recent activity.</div>
+             </div>
+          </div>
+
+          <div class="glass-card overflow-hidden h-fit">
+            <div class="bg-white/5 p-4 border-b border-white/10 flex justify-between items-center">
+              <h3 class="text-lg font-bold text-white flex items-center urdu-text">
+                <span class="w-2 h-2 bg-red-500 rounded-full ml-2 animate-pulse"></span>
+                اہم اطلاعات
+              </h3>
+            </div>
+            <div class="p-4">
+              <ul class="space-y-4 max-h-[300px] overflow-y-auto" id="notification-list">
+                <li class="text-gray-400 text-sm text-center">Loading updates...</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="hidden-view space-y-6" id="view-subjects">
+        <h2 class="text-2xl font-bold text-white mb-6">📚 Select Subject</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" id="subjects-grid"></div>
+        <button class="mt-6 text-cyan-400 font-bold" onclick="router('home')">&#8592; Back</button>
+      </div>
+
+      <div class="hidden-view max-w-lg mx-auto glass-card p-8" id="view-calculator">
+        <h2 class="text-2xl font-bold text-white mb-6">🧮 Merit Calculator</h2>
+        <div class="space-y-4">
+            <div><label class="block text-sm text-gray-300">Matric %</label><input class="w-full p-3 rounded-lg bg-black/30 border border-white/10 text-white outline-none" id="cal-matric" placeholder="85" type="number"></div>
+            <div><label class="block text-sm text-gray-300">Inter %</label><input class="w-full p-3 rounded-lg bg-black/30 border border-white/10 text-white outline-none" id="cal-inter" placeholder="70" type="number"></div>
+            <div><label class="block text-sm text-gray-300">Bachelor %</label><input class="w-full p-3 rounded-lg bg-black/30 border border-white/10 text-white outline-none" id="cal-bach" placeholder="65" type="number"></div>
+            <div><label class="block text-sm text-gray-300">Test Score</label><input class="w-full p-3 rounded-lg bg-black/30 border border-white/10 text-white outline-none" id="cal-test" placeholder="78" type="number"></div>
+            <button class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg mt-4 transition" onclick="calculateMerit()">Calculate</button>
+            <div class="hidden mt-4 p-4 bg-green-500/20 rounded-lg text-center" id="cal-result"><div class="text-3xl font-bold text-white" id="cal-score">0%</div></div>
+        </div>
+        <button class="mt-6 text-gray-400 text-sm hover:text-white" onclick="router('home')">Cancel</button>
+      </div>
+
+      <div class="hidden-view max-w-lg mx-auto glass-card p-8 mt-10" id="view-setup">
+        <div class="text-center mb-6"><h2 class="text-3xl font-bold mt-2 text-white" id="setup-subject-title">Subject</h2></div>
+        <div class="space-y-6">
+            <div><label class="block text-sm text-gray-300 mb-2">Questions</label><select class="block w-full border border-white/10 rounded-lg p-3 bg-black/30 text-white" id="setup-count"><option value="10">10</option><option value="20">20</option><option value="50">50</option></select></div>
+            <div class="bg-white/5 p-4 rounded-lg flex justify-between items-center"><label class="block text-sm text-gray-300">Timer (1 min/question)</label><input checked class="h-5 w-5" id="setup-timer" type="checkbox"></div>
+            <button class="w-full bg-cyan-600 hover:bg-cyan-500 text-white text-lg font-bold py-3 rounded-lg transition" onclick="startQuiz()">Start Quiz</button>
+            <button class="w-full text-gray-400 text-sm hover:text-white mt-2" onclick="router('home')">Cancel</button>
+        </div>
+      </div>
+
+      <div class="hidden-view max-w-3xl mx-auto mt-4" id="view-quiz">
+        <div class="flex justify-between items-center mb-6 glass-card p-4">
+            <div class="flex items-center"><span class="text-xs font-bold text-gray-400 uppercase mr-2">Progress</span><span class="text-cyan-400 font-bold text-lg" id="quiz-progress">1/10</span></div>
+            <div class="flex items-center bg-white/10 px-3 py-1 rounded"><span class="mr-2 text-lg">🕒</span><span class="text-white font-mono font-bold text-xl" id="quiz-timer">--:--</span></div>
+        </div>
+        <div class="glass-card p-6 sm:p-10 mb-8 relative">
+            <button class="absolute top-4 right-4 text-gray-400 hover:text-yellow-400" id="btn-bookmark-current" onclick="toggleBookmarkCurrent()">&#11088;</button>
+            <h3 class="text-xl sm:text-2xl font-semibold text-white mb-8 pr-8" id="quiz-question">Loading...</h3>
+            <div class="space-y-3" id="quiz-options"></div>
+        </div>
+        <div class="flex justify-between items-center">
+            <button class="text-red-400 font-medium px-4" onclick="quitQuiz()">Quit</button>
+            <button class="bg-gray-800 text-white px-8 py-3 rounded-lg font-bold hover:bg-black transition" id="btn-next" onclick="nextQuestion()">Next Question &#8594;</button>
+        </div>
+      </div>
+
+      <div class="hidden-view max-w-md mx-auto text-center glass-card p-8 mt-10" id="view-result">
+        <div class="w-20 h-20 bg-yellow-500/20 text-yellow-400 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">🏆</div>
+        <h2 class="text-3xl font-bold text-white mb-2 urdu-text">بہترین!</h2>
+        <p class="text-sm text-green-400 font-bold mb-4" id="xp-gained-msg">+50 XP</p>
+        <div class="grid grid-cols-3 gap-4 mb-8">
+            <div class="p-3 bg-green-500/20 rounded-lg"><div class="text-2xl font-bold text-green-400" id="res-score">0</div><div class="text-[10px] uppercase font-bold text-green-200">Correct</div></div>
+            <div class="p-3 bg-white/10 rounded-lg"><div class="text-2xl font-bold text-white" id="res-total">0</div><div class="text-[10px] uppercase font-bold text-gray-300">Total</div></div>
+            <div class="p-3 bg-red-500/20 rounded-lg"><div class="text-2xl font-bold text-red-400" id="res-wrong">0</div><div class="text-[10px] uppercase font-bold text-red-200">Wrong</div></div>
+        </div>
+        <button class="w-full mb-3 bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg shadow flex items-center justify-center transition" onclick="shareResult()">Challenge on WhatsApp</button>
+        <div class="space-y-3">
+            <button class="w-full bg-cyan-500/20 text-cyan-300 font-bold py-3 rounded-lg" onclick="router('home')">Return to Dashboard</button>
+        </div>
+      </div>
+
+      <div class="hidden-view max-w-4xl mx-auto glass-card p-8" id="view-bookmarks">
+        <h2 class="text-2xl font-bold text-white mb-6">&#11088; Saved Questions</h2>
+        <div class="space-y-4" id="bookmarks-list"></div>
+        <div class="hidden text-center py-10 text-gray-400" id="bookmarks-empty">No saved questions.</div>
+        <button class="mt-6 text-cyan-400 font-bold" onclick="router('home')">&#8592; Back</button>
+      </div>
+
+      <div class="hidden-view max-w-4xl mx-auto glass-card p-8" id="view-history">
+        <h2 class="text-2xl font-bold text-white mb-6">📊 My Progress</h2>
+        <div class="overflow-x-auto"><table class="min-w-full text-left"><thead><tr><th class="px-5 py-3 text-gray-300">Date</th><th class="px-5 py-3 text-gray-300">Subject</th><th class="px-5 py-3 text-gray-300">Score</th></tr></thead><tbody id="history-list"></tbody></table></div>
+        <div class="hidden text-center py-10 text-gray-400" id="history-empty">No records found.</div>
+        <button class="mt-6 text-cyan-400 font-bold" onclick="router('home')">&#8592; Back</button>
+      </div>
+
+      <div class="hidden-view space-y-6" id="view-downloads">
+        <h2 class="text-2xl font-bold text-white mb-6">📥 Library</h2>
+        <div class="flex space-x-2 overflow-x-auto pb-2 mb-4" id="download-filters"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="downloads-grid"></div>
+        <button class="mt-6 text-cyan-400 font-bold" onclick="router('home')">&#8592; Back</button>
+      </div>
+
+    </main>
+    <footer class="glass-nav mt-auto py-6 text-center text-sm text-gray-400">
+        <p class="font-bold text-cyan-400">I-SHARK Aspirants</p>
+        <p class="text-xs mt-1">Powered by I-SHARK Institute</p>
+        <p class="text-xs mt-2">&#169; 2026 All Rights Reserved</p>
+    </footer>
+  </div>
+
+  <script>
+    const firebaseConfig = { apiKey: "AIzaSyC8nptTKV3cJtnkri-hDZNCTidlMeGcCIs", authDomain: "i-shark.firebaseapp.com", projectId: "i-shark", storageBucket: "i-shark.firebasestorage.app", messagingSenderId: "304378182943", appId: "1:304378182943:web:305b03b013367c8ff1c42a", measurementId: "G-D2T6Q9HNZD" };
+    const MCQS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrsv46X2jSnEk1I0JBLuWUVcLygQ4euMnCfWm-reE8f9tnzIBwAV-ZEw9l-9NvZECl5tWnHGEXF8HP/pub?gid=0&single=true&output=csv";
+    const NOTIFICATIONS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrsv46X2jSnEk1I0JBLuWUVcLygQ4euMnCfWm-reE8f9tnzIBwAV-ZEw9l-9NvZECl5tWnHGEXF8HP/pub?gid=168417419&single=true&output=csv";
+    const DOWNLOADS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrsv46X2jSnEk1I0JBLuWUVcLygQ4euMnCfWm-reE8f9tnzIBwAV-ZEw9l-9NvZECl5tWnHGEXF8HP/pub?gid=822668211&single=true&output=csv";
+    const QUOTES_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrsv46X2jSnEk1I0JBLuWUVcLygQ4euMnCfWm-reE8f9tnzIBwAV-ZEw9l-9NvZECl5tWnHGEXF8HP/pub?gid=476493202&single=true&output=csv";
+
+    // GLOBAL VARS
+    let appData = { mcqs: [], notifications: [], downloads: [], subjects: [] };
+    let mistakes = JSON.parse(localStorage.getItem('mistakeBank')) || [];
+    let bookmarks = JSON.parse(localStorage.getItem('bookmarkBank')) || [];
+    let userStats = JSON.parse(localStorage.getItem('userStats')) || { xp: 0, streak: 0, lastVisit: null };
+    let currentQuiz = { questions: [], index: 0, score: 0, wrong: 0, timer: null, timeRemaining: 0, isMistakeDrill: false, answered: false };
+    let selectedSubject = "";
+    let currentUser = null;
+
+    // INIT FIREBASE
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    auth.onAuthStateChanged(user => { 
+        currentUser = user; 
+        updateAuthUI(); 
+    });
+
+    // NAVIGATION & CORE FUNCTIONS
+    function toggleMobileMenu() {
+        const menu = document.getElementById('mobile-menu');
+        menu.classList.toggle('hidden');
+    }
+
+    function toggleSearch() {
+        const overlay = document.getElementById('search-overlay');
+        overlay.classList.toggle('hidden');
+        if (!overlay.classList.contains('hidden')) {
+            document.getElementById('search-input').focus();
+        }
+    }
+
+    function handleSearch(query) {
+        const resultsDiv = document.getElementById('search-results');
+        if (query.length < 2) { resultsDiv.innerHTML = ""; return; }
+        const filtered = appData.mcqs.filter(m => m.Question.toLowerCase().includes(query.toLowerCase())).slice(0, 10);
+        resultsDiv.innerHTML = filtered.map(m => `<div class="glass-card p-4 mb-2"><p class="text-white text-sm">${m.Question}</p><p class="text-cyan-400 text-xs mt-1">${m.Subject}</p></div>`).join('');
+    }
+
+    function router(viewName) { 
+        document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden-view')); 
+        const target = document.getElementById(`view-${viewName}`); 
+        if(target) target.classList.remove('hidden-view'); 
+        window.scrollTo(0, 0); 
+        if(viewName === 'home') renderHome(); 
+        if(viewName === 'downloads') renderDownloads(); 
+        if(viewName === 'bookmarks') renderBookmarks(); 
+        if(viewName === 'subjects') renderSubjects(); 
+        if(viewName === 'history') renderHistory();
+        document.getElementById('mobile-menu').classList.add('hidden');
+    }
+
+    // DATA FETCHING
+    document.addEventListener('DOMContentLoaded', async () => {
+        checkStreak(); 
+        try { 
+            await Promise.all([fetchMCQs(), fetchNotifications(), fetchQuotes(), fetchDownloads()]); 
+            router('home'); 
+        } catch (e) { 
+            console.error("Data Load Error:", e);
+            router('home'); 
+        }
+    });
+
+    function fetchMCQs() { return new Promise((resolve) => { Papa.parse(MCQS_CSV_URL, { download: true, header: true, skipEmptyLines: true, complete: function(results) { const data = results.data.filter(row => row.Question && row.Subject); appData.mcqs = data; appData.subjects = [...new Set(data.map(item => item.Subject))]; resolve(); } }); }); }
+    function fetchNotifications() { return new Promise((resolve) => { Papa.parse(NOTIFICATIONS_CSV_URL, { download: true, header: true, skipEmptyLines: true, complete: function(results) { appData.notifications = results.data.filter(row => row.Title); resolve(); } }); }); }
+    function fetchDownloads() { Papa.parse(DOWNLOADS_CSV_URL, { download: true, header: true, skipEmptyLines: true, complete: function(results) { appData.downloads = results.data.filter(row => row.Title && row.Link); } }); }
+    function fetchQuotes() { Papa.parse(QUOTES_CSV_URL, { download: true, header: true, skipEmptyLines: true, complete: function(results) { const validQuotes = results.data.filter(r => r.Quote).map(r => r.Quote); if(validQuotes.length > 0) document.getElementById('daily-quote').innerText = validQuotes[Math.floor(Math.random() * validQuotes.length)]; } }); }
+
+    // AUTH UI
+    function updateAuthUI() {
+        const btnMob = document.getElementById('auth-btn-mobile');
+        const infoDesk = document.getElementById('user-info-desktop');
+        const infoMob = document.getElementById('user-info-mobile');
+        if (currentUser) {
+            const name = currentUser.displayName ? currentUser.displayName.split(' ')[0] : 'Aspirant';
+            btnMob.innerText = "Logout";
+            btnMob.onclick = () => auth.signOut();
+            infoDesk.innerText = `👤 ${name}`;
+            infoDesk.classList.remove('hidden');
+            document.getElementById('user-name-mobile').innerText = name;
+            infoMob.classList.remove('hidden');
+            infoMob.classList.add('flex');
+            renderActivityFeed();
+        } else {
+            btnMob.innerText = "Login";
+            btnMob.onclick = handleAuth;
+            infoDesk.classList.add('hidden');
+            infoMob.classList.add('hidden');
+        }
+    }
+    function handleAuth() { const provider = new firebase.auth.GoogleAuthProvider(); auth.signInWithPopup(provider).catch(console.error); }
+
+    // QUIZ LOGIC
+    function setupQuiz(subject) { selectedSubject = subject; document.getElementById('setup-subject-title').innerText = subject; router('setup'); }
+
+    function startQuiz() {
+        const count = parseInt(document.getElementById('setup-count').value);
+        const useTimer = document.getElementById('setup-timer').checked;
+        let subjectMcqs = appData.mcqs.filter(m => m.Subject === selectedSubject).sort(() => 0.5 - Math.random()).slice(0, count);
+        if(subjectMcqs.length === 0) { alert("No MCQs found for this subject."); return; }
+        currentQuiz = { questions: subjectMcqs, index: 0, score: 0, wrong: 0, timer: useTimer ? setInterval(tickTimer, 1000) : null, timeRemaining: count * 60, isMistakeDrill: false, answered: false };
+        router('quiz'); renderQuestion();
+    }
+
+    function renderQuestion() {
+        const q = currentQuiz.questions[currentQuiz.index];
+        currentQuiz.answered = false;
+        document.getElementById('quiz-progress').innerText = `${currentQuiz.index + 1}/${currentQuiz.questions.length}`;
+        document.getElementById('quiz-question').innerText = q.Question;
+        
+        const isBookmarked = bookmarks.some(b => b.Question === q.Question);
+        document.getElementById('btn-bookmark-current').style.color = isBookmarked ? '#facc15' : '#9ca3af';
+
+        const optsDiv = document.getElementById('quiz-options');
+        optsDiv.innerHTML = '';
+        ['A', 'B', 'C', 'D'].forEach(opt => {
+            if(q['Option' + opt]) {
+                optsDiv.innerHTML += `
+                    <div onclick="selectAnswer(this, '${opt}')" class="p-4 border-2 border-white/10 rounded-lg cursor-pointer hover:bg-white/10 transition opt-btn flex items-center" data-opt="${opt}">
+                        <span class="w-8 h-8 rounded-full bg-white/10 text-gray-300 font-bold flex items-center justify-center mr-4">${opt}</span>
+                        <span class="text-gray-200 font-medium">${q['Option' + opt]}</span>
+                    </div>`;
+            }
+        });
+    }
+
+    function selectAnswer(el, selectedOpt) {
+        if (currentQuiz.answered) return;
+        currentQuiz.answered = true;
+        
+        const q = currentQuiz.questions[currentQuiz.index];
+        const correctOpt = q.CorrectOption.trim().toUpperCase();
+        
+        if (selectedOpt === correctOpt) {
+            el.classList.add('correct-answer');
+            currentQuiz.score++;
+        } else {
+            el.classList.add('wrong-answer');
+            currentQuiz.wrong++;
+            // Show the correct one
+            const correctEl = document.querySelector(`.opt-btn[data-opt="${correctOpt}"]`);
+            if(correctEl) correctEl.classList.add('correct-answer');
+            // Save to mistakes
+            if(!mistakes.some(m => m.Question === q.Question)) {
+                mistakes.push(q);
+                localStorage.setItem('mistakeBank', JSON.stringify(mistakes));
+            }
+        }
+        el.setAttribute('data-selected', 'true');
+    }
+
+    function nextQuestion() {
+        if (!currentQuiz.answered) { alert("Please select an answer first!"); return; }
+        currentQuiz.index++;
+        if(currentQuiz.index >= currentQuiz.questions.length) finishQuiz();
+        else renderQuestion();
+    }
+
+    function finishQuiz() {
+        if(currentQuiz.timer) clearInterval(currentQuiz.timer);
+        router('result');
+        document.getElementById('res-score').innerText = currentQuiz.score;
+        document.getElementById('res-total').innerText = currentQuiz.questions.length;
+        document.getElementById('res-wrong').innerText = currentQuiz.wrong;
+        const xpEarned = currentQuiz.score * 10;
+        addXP(xpEarned);
+        document.getElementById('xp-gained-msg').innerText = `+${xpEarned} XP Earned!`;
+        
+        if(currentUser && !currentQuiz.isMistakeDrill) {
+            db.collection('users').doc(currentUser.uid).collection('history').add({
+                subject: selectedSubject, score: currentQuiz.score, total: currentQuiz.questions.length, timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    }
+
+    function tickTimer() {
+        currentQuiz.timeRemaining--;
+        const min = Math.floor(currentQuiz.timeRemaining / 60);
+        const sec = currentQuiz.timeRemaining % 60;
+        const timerEl = document.getElementById('quiz-timer');
+        timerEl.innerText = `${min}:${sec < 10 ? '0'+sec : sec}`;
+        if(currentQuiz.timeRemaining <= 0) finishQuiz();
+    }
+
+    // HELPER FUNCTIONS
+    function checkStreak() {
+        const today = new Date().toDateString();
+        if(userStats.lastVisit !== today) {
+            const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+            if(userStats.lastVisit === yesterday.toDateString()) userStats.streak++;
+            else userStats.streak = 1;
+            userStats.lastVisit = today;
+            localStorage.setItem('userStats', JSON.stringify(userStats));
+        }
+    }
+    function addXP(amount) { userStats.xp += amount; localStorage.setItem('userStats', JSON.stringify(userStats)); return userStats.xp; }
+    function getRank(xp) { if(xp < 100) return { title: "Beginner", next: 100 }; if(xp < 500) return { title: "Aspirant", next: 500 }; return { title: "Expert", next: 10000 }; }
+
+    function renderHome() {
+        const rank = getRank(userStats.xp);
+        document.getElementById('user-rank').innerText = rank.title;
+        document.getElementById('user-xp').innerText = `${userStats.xp} XP`;
+        document.getElementById('xp-next').innerText = rank.next;
+        document.getElementById('user-streak').innerText = userStats.streak;
+        document.getElementById('xp-bar').style.width = `${Math.min(100, (userStats.xp / rank.next) * 100)}%`;
+        
+        const notifList = document.getElementById('notification-list');
+        if (appData.notifications.length === 0) {
+            notifList.innerHTML = '<li class="text-gray-400 text-xs">No updates</li>';
+        } else {
+            const reversedNotifs = [...appData.notifications].reverse();
+            notifList.innerHTML = reversedNotifs.map(n => `
+                <li class="border-b border-white/10 pb-2">
+                    <div class="text-[10px] text-gray-500 mb-0.5 tracking-wider font-mono">${n.Date || 'Recent'}</div>
+                    <a href="${n.Link || '#'}" target="_blank" class="text-cyan-300 text-sm font-semibold block leading-snug">${n.Title}</a>
+                </li>
+            `).join('');
+        }
+        
+        document.getElementById('mistake-badge').classList.toggle('hidden', mistakes.length === 0);
+    }
+
+    function renderSubjects() {
+        document.getElementById('subjects-grid').innerHTML = appData.subjects.map(sub => `
+            <div onclick="setupQuiz('${sub}')" class="glass-card p-6 flex justify-between items-center cursor-pointer hover:bg-white/10">
+                <div><h4 class="font-bold text-gray-200">${sub}</h4></div>
+                <div class="w-8 h-8 bg-cyan-500/20 text-cyan-300 rounded-full flex items-center justify-center">→</div>
+            </div>`).join('');
+    }
+
+    function calculateMerit() {
+        const mat = parseFloat(document.getElementById('cal-matric').value) || 0;
+        const inter = parseFloat(document.getElementById('cal-inter').value) || 0;
+        const bach = parseFloat(document.getElementById('cal-bach').value) || 0;
+        const test = parseFloat(document.getElementById('cal-test').value) || 0;
+        const agg = (mat * 0.1) + (inter * 0.2) + (bach * 0.3) + (test * 0.4);
+        document.getElementById('cal-score').innerText = agg.toFixed(2) + "%";
+        document.getElementById('cal-result').classList.remove('hidden');
+    }
+
+    function startMockExam() {
+        selectedSubject = "Grand Mock Exam";
+        let mockQ = [...appData.mcqs].sort(() => 0.5 - Math.random()).slice(0, 50);
+        currentQuiz = { questions: mockQ, index: 0, score: 0, wrong: 0, timer: setInterval(tickTimer, 1000), timeRemaining: 50 * 60, answered: false };
+        router('quiz'); renderQuestion();
+    }
+
+    function startMistakeQuiz() {
+        if(!mistakes.length) return;
+        selectedSubject = "Mistake Drill";
+        currentQuiz = { questions: [...mistakes], index: 0, score: 0, wrong: 0, timer: null, answered: false };
+        router('quiz'); renderQuestion();
+    }
+
+    function toggleBookmarkCurrent() {
+        const q = currentQuiz.questions[currentQuiz.index];
+        const idx = bookmarks.findIndex(b => b.Question === q.Question);
+        if(idx > -1) bookmarks.splice(idx, 1);
+        else bookmarks.push(q);
+        localStorage.setItem('bookmarkBank', JSON.stringify(bookmarks));
+        document.getElementById('btn-bookmark-current').style.color = (idx > -1) ? '#9ca3af' : '#facc15';
+    }
+
+    function renderDownloads() {
+        const grid = document.getElementById('downloads-grid');
+        grid.innerHTML = appData.downloads.map(f => `
+            <div class="glass-card p-4 flex justify-between items-center">
+                <div><h4 class="font-bold text-gray-200 text-sm">${f.Title}</h4></div>
+                <a href="${f.Link}" target="_blank" class="text-cyan-400">Download</a>
+            </div>`).join('');
+    }
+
+    function quitQuiz() { if(confirm("Quit Quiz?")) { if(currentQuiz.timer) clearInterval(currentQuiz.timer); router('home'); } }
+    function shareResult() {
+        const text = `🔥 I scored ${currentQuiz.score}/${currentQuiz.questions.length} on I-SHARK Aspirants! Try it here: ${window.location.href}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    function renderBookmarks() {
+        const list = document.getElementById('bookmarks-list');
+        const empty = document.getElementById('bookmarks-empty');
+        
+        if (bookmarks.length === 0) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
+        } else {
+            empty.classList.add('hidden');
+            list.innerHTML = bookmarks.map(q => {
+                const correctAnswerKey = 'Option' + q.CorrectOption.trim().toUpperCase();
+                const answerText = q[correctAnswerKey] ? q[correctAnswerKey] : 'Data not found';
+                return `
+                <div class="glass-card p-4 mb-3 border border-white/10">
+                    <p class="text-white font-medium mb-2">${q.Question}</p>
+                    <div class="bg-green-500/20 text-green-300 px-3 py-2 rounded text-sm">
+                        <strong>Answer:</strong> ${answerText}
+                    </div>
+                </div>
+            `}).join('');
+        }
+    }
+
+    function renderActivityFeed() {
+        const feed = document.getElementById('activity-feed');
+        if (!currentUser) return;
+        
+        db.collection('users').doc(currentUser.uid).collection('history')
+          .orderBy('timestamp', 'desc').limit(5).get()
+          .then(snap => {
+            if (snap.empty) {
+                feed.innerHTML = "<div class='text-center text-gray-400 text-sm py-4'>No recent activity.</div>";
+                return;
+            }
+            feed.innerHTML = snap.docs.map(doc => {
+                const data = doc.data();
+                return `<div class="bg-white/5 p-3 mb-2 rounded flex justify-between items-center border border-white/10">
+                    <span class="text-gray-300 text-sm font-medium">${data.subject}</span>
+                    <span class="text-cyan-400 font-bold bg-cyan-500/10 px-2 py-1 rounded">${data.score} / ${data.total}</span>
+                </div>`;
+            }).join('');
+        }).catch(err => {
+            console.error("Activity feed error:", err);
+            feed.innerHTML = "<div class='text-red-400 text-xs py-2 text-center'>Failed to load history.</div>";
+        });
+    }
+
+    function renderHistory() {
+        const list = document.getElementById('history-list');
+        const empty = document.getElementById('history-empty');
+        
+        if (!currentUser) {
+            list.innerHTML = '';
+            empty.innerText = "Please login to view progress.";
+            empty.classList.remove('hidden');
+            return;
+        }
+
+        db.collection('users').doc(currentUser.uid).collection('history')
+          .orderBy('timestamp', 'desc').get()
+          .then(snap => {
+            if (snap.empty) {
+                list.innerHTML = '';
+                empty.innerText = "No records found.";
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+            list.innerHTML = snap.docs.map(doc => {
+                const data = doc.data();
+                const date = data.timestamp ? data.timestamp.toDate().toLocaleDateString() : 'Just now';
+                return `<tr class="border-b border-white/10 hover:bg-white/5 transition">
+                    <td class="px-5 py-3 text-sm text-gray-300">${date}</td>
+                    <td class="px-5 py-3 text-sm text-white">${data.subject}</td>
+                    <td class="px-5 py-3 text-sm text-cyan-400 font-bold">${data.score}/${data.total}</td>
+                </tr>`;
+            }).join('');
+        }).catch(err => {
+            console.error("History fetch error:", err);
+            empty.innerText = "Failed to load records.";
+            empty.classList.remove('hidden');
+        });
+    }
+  </script>
+</body>
+</html>
