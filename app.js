@@ -560,6 +560,3 @@ async function adminAction(type, btn) {
 }
 
 document.addEventListener("DOMContentLoaded", boot);
-git add .
-git commit -m "Update: system improvements and fixes"
-git push origin main
