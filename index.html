@@ -1,45 +1,63 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>I-SHARK Aspirants | 2026 Professional Vault</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>I-SHARK Aspirants | 2026 Digital Vault</title>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
-</head>
-<body class="bg-[#050505] text-slate-200 antialiased overflow-x-hidden">
 
-    <div id="app" class="min-h-screen flex flex-col">
-        <nav class="glass-nav sticky top-0 z- px-6 py-4 flex justify-between items-center">
-            <div class="flex items-center gap-2 cursor-pointer group" onclick="router('home')">
-                <div class="w-8 h-8 bg-cyan-500 rounded-lg flex items-center justify-center font-black text-black group-hover:rotate-12 transition-transform">S</div>
-                <h1 class="text-xl font-black tracking-tighter text-white">I-SHARK</h1>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: { primary: "#0df2f2", obsidian: "#080c0c" },
+                    fontFamily: { display: ["Inter", "sans-serif"], urdu: ["Noto Nastaliq Urdu", "serif"] }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-obsidian text-slate-100 min-h-screen selection:bg-primary/30 antialiased overflow-x-hidden">
+
+    <nav id="main-nav" class="fixed top-4 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z- transition-all duration-500">
+        <div class="nav-blur border border-white/10 rounded-full px-6 py-2.5 flex items-center justify-between shadow-2xl">
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="router('home')">
+                <div class="text-primary group-hover:rotate-12 transition-transform">
+                    <svg class="w-7 h-7" fill="none" viewBox="0 0 48 48"><path d="M24 0.75L47.24 24L24 47.24L0.75 24L24 0.75ZM21 35.75V12.24L9.24 24L21 35.75Z" fill="currentColor"/></svg>
+                </div>
+                <h1 class="text-lg font-black tracking-tighter text-white uppercase italic">I-SHARK</h1>
             </div>
-            
-            <div id="auth-ui">
-                <button onclick="login()" id="login-btn" class="btn-primary">Login</button>
+
+            <div id="auth-layer" class="flex items-center gap-4">
+                <button onclick="login()" id="login-btn" class="text-xs font-black uppercase tracking-widest text-primary hover:text-white transition-colors">Login</button>
                 <div id="user-profile" class="hidden flex items-center gap-4">
-                    <div class="text-right hidden sm:block">
-                        <p id="user-name" class="text-xs font-black text-cyan-400 uppercase tracking-widest"></p>
-                        <p id="nav-xp" class="text-[10px] text-slate-500 font-bold"></p>
+                    <div class="hidden md:flex flex-col items-end leading-none">
+                        <span class="text-[9px] uppercase tracking-widest text-primary/60 font-bold">Aspirant</span>
+                        <span id="nav-xp" class="text-xs font-mono text-white">0 XP</span>
                     </div>
-                    <button onclick="logout()" class="p-2 hover:bg-white/5 rounded-full transition-colors">
-                        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                    </button>
+                    <div class="h-9 w-9 rounded-full border border-primary/30 flex items-center justify-center bg-primary/10 text-primary font-bold cursor-pointer" onclick="logout()">
+                        <span id="user-initial">?</span>
+                    </div>
                 </div>
             </div>
-        </nav>
+        </div>
+    </nav>
 
-        <main id="view-container" class="flex-grow container mx-auto max-w-5xl px-4 py-8 relative">
-            <div id="loader" class="flex flex-col items-center justify-center py-32">
-                <div class="loader-ring"></div>
-                <p class="mt-6 text-[10px] font-black uppercase tracking-[0.4em] text-cyan-500 animate-pulse">Syncing Database</p>
-            </div>
-        </main>
-    </div>
+    <main id="view-container" class="relative pt-24 pb-12 px-6 max-w-6xl mx-auto min-h-screen">
+        <div id="boot-loader" class="absolute inset-0 flex flex-col items-center justify-center">
+            <div class="loader-ring"></div>
+            <p class="mt-6 text-[10px] font-black uppercase tracking-[0.4em] text-primary animate-pulse">Syncing Database</p>
+        </div>
+    </main>
 
     <script src="app.js"></script>
 </body>
