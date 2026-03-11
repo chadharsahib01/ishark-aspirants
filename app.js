@@ -184,3 +184,71 @@ function renderHome(cont) {
     `;
     updateProfileUI();
 }
+// --- PHASE 3: SUBJECT SELECTION VAULT ---
+function renderVault(cont) {
+    // Priority 5 & 11: Generate grid based on subjects found in the MCQs collection
+    const subjectsHTML = window.SHARK.subjects.length ? 
+        window.SHARK.subjects.map(s => `
+            <div onclick="initQuiz('${s}')" class="glass-panel group rounded-xl p-6 flex flex-col justify-between aspect-[4/3] cursor-pointer hover:border-primary/50 transition-all">
+                <div class="flex justify-between items-start">
+                    <div class="p-3 rounded-lg bg-primary/10 text-primary">
+                        <span class="material-symbols-outlined text-3xl">
+                            ${getIcon(s)}
+                        </span>
+                    </div>
+                    <span class="text-[10px] font-black px-2 py-1 rounded bg-primary/20 text-primary uppercase tracking-widest">Active</span>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-slate-100 mb-2">${s}</h3>
+                    <p class="text-xs text-slate-400 font-medium">Master this category with our curated question banks.</p>
+                </div>
+            </div>
+        `).join('') : `
+            <div class="col-span-full card p-20 text-center">
+                <p class="text-slate-500 italic uppercase tracking-widest text-xs">No subject modules currently synchronized.</p>
+            </div>`;
+
+    cont.innerHTML = `
+        <div class="animate-view space-y-12">
+            <div class="flex justify-between items-end border-b border-white/5 pb-6">
+                <div>
+                    <h1 class="text-4xl font-black text-white tracking-tight">Subject Vault</h1>
+                    <p class="text-slate-400 font-medium mt-1 text-sm">Choose your field of study to begin your practice.</p>
+                </div>
+                <button onclick="router('home')" class="text-[10px] font-black text-slate-600 hover:text-white transition-colors uppercase tracking-widest">← Back to HQ</button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                ${subjectsHTML}
+            </div>
+
+            <div class="mt-16 glass-panel rounded-2xl p-8 flex flex-wrap gap-8 items-center justify-around border-primary/5 bg-primary/5">
+                <div class="text-center">
+                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Vault MCQs</p>
+                    <p class="text-2xl font-black text-primary">${window.SHARK.mcqs.length.toLocaleString()}+</p>
+                </div>
+                <div class="h-10 w-px bg-white/5 hidden md:block"></div>
+                <div class="text-center">
+                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">System Health</p>
+                    <p class="text-2xl font-black text-primary">99.8%</p>
+                </div>
+                <div class="h-10 w-px bg-white/5 hidden md:block"></div>
+                <div class="text-center">
+                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Success Rate</p>
+                    <p class="text-2xl font-black text-primary">94.2%</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Helper: Maps subject names to Material Icons
+function getIcon(sub) {
+    const s = sub.toLowerCase();
+    if (s.includes('knowledge')) return 'public';
+    if (s.includes('pakistan')) return 'account_balance';
+    if (s.includes('islam')) return 'mosque';
+    if (s.includes('science')) return 'biotech';
+    if (s.includes('english')) return 'translate';
+    return 'menu_book';
+}
