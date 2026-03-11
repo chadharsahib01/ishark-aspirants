@@ -252,3 +252,116 @@ function getIcon(sub) {
     if (s.includes('english')) return 'translate';
     return 'menu_book';
 }
+// --- PHASE 4: THE FOCUS-MODE QUIZ ENGINE ---
+
+function initQuiz(sub) {
+    // 1. Filter and Shuffle questions (Fisher-Yates used in boot)
+    const questions = shuffle(window.SHARK.mcqs.filter(m => m.Subject === sub)).slice(0, 10);
+    
+    if (!questions.length) {
+        alert("This vault is currently empty.");
+        return;
+    }
+
+    // 2. Setup State
+    quizState = {
+        active: true,
+        pool: questions,
+        index: 0,
+        score: 0,
+        answered: false,
+        results: [] // For Analysis Hub
+    };
+
+    renderQuiz();
+}
+
+function renderQuiz() {
+    const q = quizState.pool[quizState.index];
+    const cont = document.getElementById("view-container");
+    const progress = ((quizState.index + 1) / quizState.pool.length) * 100;
+
+    cont.innerHTML = `
+        <div class="animate-view flex flex-col items-center">
+            <div class="fixed top-0 left-0 w-full h-1 bg-white/5 z-">
+                <div class="h-full bg-primary shadow-[0_0_15px_#0df2f2] transition-all duration-500" style="width: ${progress}%"></div>
+            </div>
+
+            <div class="w-full max-w-3xl space-y-8">
+                <div class="flex justify-between items-end px-2">
+                    <div class="flex flex-col">
+                        <span class="text-primary text-[10px] font-black tracking-[0.2em] uppercase">Session Active</span>
+                        <h2 class="text-slate-500 text-xs font-bold uppercase tracking-widest">Question ${quizState.index + 1} of 10</h2>
+                    </div>
+                    <div class="flex items-center gap-2 text-primary font-mono font-bold text-sm">
+                        <span class="material-symbols-outlined text-sm">timer</span> 00:45
+                    </div>
+                </div>
+
+                <div class="glass-panel rounded-2xl p-8 md:p-14 shadow-2xl relative overflow-hidden border-white/5">
+                    <div class="relative z-10">
+                        <h1 class="text-2xl md:text-3xl font-bold leading-tight text-white mb-10">${q.Question}</h1>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${["A", "B", "C", "D"].map(o => `
+                                <button data-option="${o}" onclick="handleAnswer(this, '${o}')" 
+                                    class="quiz-opt glass-panel p-5 rounded-xl text-left flex items-center gap-4 group hover:bg-white/5 transition-all">
+                                    <span class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs font-black group-hover:bg-primary group-hover:text-obsidian transition-colors">${o}</span>
+                                    <span class="font-bold text-slate-300 group-hover:text-white transition-colors">${q["Option" + o]}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center px-2">
+                    <button onclick="if(confirm('Abandon session?')) router('home')" class="text-[10px] font-black text-slate-700 hover:text-red-500 uppercase tracking-widest transition-colors">Terminate</button>
+                    <button id="btn-next" onclick="nextQ()" class="hidden btn-primary py-3 px-8 text-xs">Continue →</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function handleAnswer(el, choice) {
+    if (!quizState.active || quizState.answered) return;
+    quizState.answered = true;
+    
+    const correct = quizState.pool[quizState.index].CorrectOption.trim().toUpperCase();
+    const isCorrect = choice === correct;
+
+    // Visual Feedback Logic
+    if (isCorrect) {
+        el.style.borderColor = "#22c55e";
+        el.style.backgroundColor = "rgba(34, 197, 94, 0.1)";
+        quizState.score++;
+    } else {
+        el.style.borderColor = "#ef4444";
+        el.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+        document.querySelectorAll("[data-option]").forEach(btn => {
+            if (btn.dataset.option === correct) {
+                btn.style.borderColor = "#22c55e";
+                btn.style.backgroundColor = "rgba(34, 197, 94, 0.05)";
+            }
+        });
+    }
+
+    // Save for Analysis Hub
+    quizState.results.push({ question: quizState.pool[quizState.index].Question, userChoice: choice, correctChoice: correct, isCorrect });
+    
+    document.getElementById("btn-next").classList.remove("hidden");
+}
+
+function nextQ() {
+    quizState.index++;
+    quizState.answered = false;
+
+    if (quizState.index >= quizState.pool.length) {
+        const earned = quizState.score * 10;
+        window.SHARK.xp += earned;
+        localStorage.setItem("user_xp", window.SHARK.xp);
+        renderAnalysis(); // We will build this next
+    } else {
+        renderQuiz();
+    }
+}
