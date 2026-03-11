@@ -365,3 +365,79 @@ function nextQ() {
         renderQuiz();
     }
 }
+// --- PHASE 5: ADMIN COMMAND CENTER ---
+
+function renderAdmin(cont) {
+    // P1: Double-check authorization
+    if (!window.SHARK.user || window.SHARK.user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+        cont.innerHTML = `<div class="card p-20 text-center border-red-500/30"><h2 class="text-red-500 font-black text-2xl uppercase italic">403: Link Denied</h2><p class="text-slate-500 mt-2 text-xs font-bold uppercase tracking-widest">Unauthorized Access Attempt Logged.</p></div>`;
+        return;
+    }
+
+    cont.innerHTML = `
+        <div class="animate-view space-y-12">
+            <h2 class="text-3xl font-black text-primary uppercase tracking-tighter">Command Center</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="glass-panel rounded-2xl p-8 space-y-4">
+                    <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em]">Vault MCQ Injection</h3>
+                    <input id="m-q" placeholder="Question Text" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm focus:border-primary outline-none transition-all">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input id="m-a" placeholder="Opt A" class="bg-white/5 border border-white/10 p-3 rounded-xl text-xs">
+                        <input id="m-b" placeholder="Opt B" class="bg-white/5 border border-white/10 p-3 rounded-xl text-xs">
+                        <input id="m-c" placeholder="Opt C" class="bg-white/5 border border-white/10 p-3 rounded-xl text-xs">
+                        <input id="m-d" placeholder="Opt D" class="bg-white/5 border border-white/10 p-3 rounded-xl text-xs">
+                    </div>
+                    <select id="m-correct" class="w-full bg-obsidian border border-white/10 p-3 rounded-xl text-xs text-slate-400">
+                        <option value="A">Answer: A</option><option value="B">Answer: B</option>
+                        <option value="C">Answer: C</option><option value="D">Answer: D</option>
+                    </select>
+                    <input id="m-sub" placeholder="Subject Category (e.g. Islamiyat)" class="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-xs">
+                    <button onclick="adminAction('mcq', this)" class="btn-primary w-full py-4 text-xs">Push to Vault</button>
+                </div>
+
+                <div class="glass-panel rounded-2xl p-8 space-y-4 h-fit">
+                    <h3 class="text-[10px] font-black uppercase text-slate-500 tracking-[0.3em]">Alert Broadcast</h3>
+                    <input id="n-t" placeholder="Alert Title (Urdu/Eng)" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm outline-none">
+                    <input id="n-l" placeholder="Source URL Link" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm outline-none">
+                    <button onclick="adminAction('notif', this)" class="btn-primary w-full py-4 text-xs">Publish Alert</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function adminAction(type, btn) {
+    const originalText = btn.innerText;
+    btn.disabled = true; btn.innerText = "Syncing...";
+
+    try {
+        if (type === 'mcq') {
+            const data = {
+                Question: document.getElementById('m-q').value,
+                OptionA: document.getElementById('m-a').value,
+                OptionB: document.getElementById('m-b').value,
+                OptionC: document.getElementById('m-c').value,
+                OptionD: document.getElementById('m-d').value,
+                CorrectOption: document.getElementById('m-correct').value,
+                Subject: document.getElementById('m-sub').value
+            };
+            if(!data.Question || !data.Subject) throw new Error("Missing Fields");
+            await db.collection('mcqs').add(data);
+        } else {
+            const title = document.getElementById('n-t').value;
+            if(!title) throw new Error("Title Required");
+            await db.collection('notifications').add({
+                Title: title,
+                Link: document.getElementById('n-l').value || "#",
+                Date: new Date().toLocaleDateString('en-GB'),
+                timestamp: firebase.firestore.FieldValue.serverTimestamp() // P15 fix
+            });
+        }
+        alert("Success: Database Synchronized.");
+        location.reload();
+    } catch (e) {
+        alert("Error: " + e.message);
+        btn.disabled = false; btn.innerText = originalText;
+    }
+}
