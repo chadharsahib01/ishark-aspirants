@@ -1,34 +1,58 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>I-SHARK Aspirants | 2026 Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>I-SHARK Aspirants | The 2026 Preparation Vault</title>
+    
+    <meta name="description" content="Pakistan's premium digital vault for PPSC, CSS, and competitive exam preparation. Master your future with I-SHARK.">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0/0/100/100'><text y='.9em' font-size='90'>🦈</text></svg>">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 </head>
-<body class="bg-[#050505] text-slate-200">
+<body class="bg-[#050505] text-slate-200 selection:bg-cyan-500/30 overflow-x-hidden">
+
     <div id="app" class="min-h-screen flex flex-col">
-        <nav class="glass-nav sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-black text-cyan-400 cursor-pointer" onclick="router('home')">I-SHARK</h1>
-            <div id="auth-ui">
+        <nav class="glass-nav sticky top-0 z- px-4 md:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2 cursor-pointer group" onclick="router('home')">
+                <div class="w-8 h-8 bg-cyan-500 rounded-lg flex items-center justify-center font-black text-black group-hover:rotate-12 transition-transform">S</div>
+                <h1 class="text-xl font-black tracking-tighter text-white">I-SHARK</h1>
+            </div>
+            
+            <div id="auth-ui" class="flex items-center gap-4">
                 <button onclick="login()" id="login-btn" class="btn-primary">Login</button>
-                <div id="user-profile" class="hidden flex items-center gap-3">
-                    <span id="user-name" class="text-xs font-bold text-cyan-400"></span>
-                    <button onclick="logout()" class="text-[10px] opacity-50 uppercase">Sign Out</button>
+                <div id="user-profile" class="hidden flex items-center gap-4">
+                    <div class="text-right hidden sm:block">
+                        <p id="user-name" class="text-xs font-black text-cyan-400 uppercase tracking-widest"></p>
+                        <p id="nav-xp" class="text-[10px] text-slate-500 font-bold"></p>
+                    </div>
+                    <button onclick="logout()" class="p-2 hover:bg-white/5 rounded-full transition-colors">
+                        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                    </button>
                 </div>
             </div>
         </nav>
 
-        <main id="view-container" class="flex-grow container mx-auto max-w-5xl px-4 py-8">
-            <div id="loader" class="flex flex-col items-center py-24">
-                <div class="loader-ring"></div>
+        <main id="view-container" class="flex-grow container mx-auto max-w-5xl px-4 py-8 relative">
+            <div id="system-loader" class="absolute inset-0 flex flex-col items-center justify-center py-32">
+                <div class="loader-ring mb-6"></div>
+                <div class="text-center">
+                    <p class="text-[10px] font-black uppercase tracking-[0.4em] text-cyan-500 animate-pulse">Establishing Secure Link</p>
+                    <p class="text-[9px] text-slate-600 mt-2">© 2026 I-SHARK TECHNOLOGY</p>
+                </div>
             </div>
         </main>
+
+        <footer class="p-8 border-t border-white/5 opacity-40 text-[10px] font-bold uppercase tracking-widest text-center">
+            Built for Excellence. Powered by Firebase. NoSQL Architecture.
+        </footer>
     </div>
+
     <script src="app.js"></script>
 </body>
 </html>
