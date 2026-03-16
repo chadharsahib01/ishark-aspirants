@@ -110,35 +110,25 @@ window.router = (view) => {
 };
 
 // ==========================================
-// VIEWS (UI GENERATORS matching Images)
+// VIEWS (UI GENERATORS)
 // ==========================================
 
-// Image 1: Student Dashboard
 function viewDashboard() {
     const latestAlert = window.SHARK.alerts[0] || { title: "No recent updates", urdu: "کوئی تازہ ترین اپ ڈیٹ نہیں" };
-    
-    // Calculate global rank dynamically (assuming 100 base + 1 per 1000 XP)
     const rank = window.SHARK.userData.xp > 0 ? Math.max(1, 500 - Math.floor(window.SHARK.userData.xp / 100)) : 'Unranked';
 
-    // --- NEW: DYNAMIC CHART GENERATION ---
     let chartHTML = '';
     const activity = window.SHARK.userData.activity || {};
-    let maxDailyXP = 200; // Baseline to prevent 0 division
-    
-    // Find the highest XP day to scale the bars properly
+    let maxDailyXP = 200; 
     Object.values(activity).forEach(val => { if(val > maxDailyXP) maxDailyXP = val; });
     
-    // Generate bars for the last 10 days
     for(let i=9; i>=0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const dateStr = d.toLocaleDateString('en-CA');
         const dayXP = activity[dateStr] || 0;
-        
-        // Calculate height % (Min 5% so empty days show a small bump, Max 100%)
         let heightPct = dayXP === 0 ? 5 : Math.max(15, Math.floor((dayXP / maxDailyXP) * 100));
-        let isActive = (i === 0 && dayXP > 0) ? 'active' : ''; // Highlight today if active
-        
+        let isActive = (i === 0 && dayXP > 0) ? 'active' : ''; 
         chartHTML += `<div class="w-full rounded-t-sm stat-bar ${isActive}" style="height: ${heightPct}%" title="${dateStr}: ${dayXP} XP"></div>`;
     }
 
@@ -219,7 +209,6 @@ function viewDashboard() {
     </div>`;
 }
 
-// Image 2: Subject Vault
 function viewVault() {
     const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper' };
     
@@ -246,14 +235,11 @@ function viewVault() {
     </div>`;
 }
 
-// Image 3: Quiz Interface Logic
 window.initQuiz = (subject) => {
     let pool = window.SHARK.mcqs.filter(m => m.subject === subject);
     if(pool.length < 5) return alert("Not enough questions in this category yet.");
     
-    // Shuffle and pick 10
     pool = pool.sort(() => 0.5 - Math.random()).slice(0, 10);
-    
     window.SHARK.quizSession = { active: true, subject, pool, index: 0, score: 0, timeStart: Date.now(), history: [] };
     window.router('quiz');
 };
@@ -290,7 +276,6 @@ function viewQuiz() {
             <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-panel border border-white/10 px-4 py-1 rounded-full text-[10px] text-slate-400 uppercase tracking-widest font-bold">High Stakes</div>
             
             <h2 class="text-3xl font-bold text-center leading-tight mb-10">${q.question}</h2>
-            
             ${q.image ? `<img src="${q.image}" class="w-full rounded-xl mb-8 border border-white/10">` : ''}
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="options-container">
@@ -340,7 +325,7 @@ window.submitAnswer = () => {
     qs.index++;
     
     if(qs.index >= qs.pool.length) finalizeQuiz();
-    else window.router('quiz'); // re-render next q
+    else window.router('quiz'); 
 };
 
 function finalizeQuiz() {
@@ -352,30 +337,23 @@ function finalizeQuiz() {
     qs.finalTime = `${Math.floor(timeSpent/60)}:${(timeSpent%60).toString().padStart(2,'0')}`;
     qs.xpEarned = xpEarned;
 
-    // Update Firebase if user exists
     if(window.SHARK.user) {
         window.SHARK.userData.xp += xpEarned;
         window.SHARK.userData.quizzesTaken = (window.SHARK.userData.quizzesTaken || 0) + 1;
         
-        // NEW: Daily Activity Tracking Architecture
-        // Get today's date in YYYY-MM-DD format based on local time
         const today = new Date().toLocaleDateString('en-CA'); 
-        
         if (!window.SHARK.userData.activity) window.SHARK.userData.activity = {};
         window.SHARK.userData.activity[today] = (window.SHARK.userData.activity[today] || 0) + xpEarned;
 
-        // Sync to Firestore using atomic increments for safety
         db.collection('users').doc(window.SHARK.user.uid).update({
             xp: firebase.firestore.FieldValue.increment(xpEarned),
             quizzesTaken: firebase.firestore.FieldValue.increment(1),
             [`activity.${today}`]: firebase.firestore.FieldValue.increment(xpEarned)
         });
     }
-
     window.router('analysis');
 }
 
-// Image 4: Quiz Analysis
 function viewAnalysis() {
     const qs = window.SHARK.quizSession;
     const percent = Math.round((qs.score / qs.pool.length) * 100);
@@ -406,7 +384,6 @@ function viewAnalysis() {
             <h1 class="text-4xl font-black tracking-tight mb-2">Quiz Analysis</h1>
             <p class="text-slate-400">Detailed breakdown of your "${qs.subject}" session.</p>
         </div>
-
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="glass-panel p-6 rounded-2xl">
                 <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Total Score</p>
@@ -425,7 +402,6 @@ function viewAnalysis() {
                 <div class="w-full bg-white/10 h-1.5 rounded-full"><div class="bg-primary h-1.5 rounded-full w-1/2"></div></div>
             </div>
         </div>
-
         <div class="flex justify-between items-center mt-10 mb-4">
             <h2 class="text-2xl font-bold">Review Questions</h2>
             <div class="flex gap-2 text-xs font-bold">
@@ -433,9 +409,7 @@ function viewAnalysis() {
                 <span class="px-3 py-1 bg-rose-500/20 text-rose-400 rounded">${qs.pool.length - qs.score} Incorrect</span>
             </div>
         </div>
-        
         <div class="space-y-4">${reviewCards}</div>
-
         <div class="flex gap-4 mt-8">
             <button onclick="window.router('dashboard')" class="btn-primary w-full py-4 rounded-xl text-lg flex justify-center items-center gap-2">
                 <span class="material-symbols-outlined">dashboard</span> Back to Dashboard
@@ -444,7 +418,6 @@ function viewAnalysis() {
     </div>`;
 }
 
-// Image 5: Alerts Archive
 function viewAlerts() {
     const alertHtml = window.SHARK.alerts.map(a => `
         <div class="glass-panel p-6 rounded-2xl flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -471,23 +444,23 @@ function viewAlerts() {
             <h1 class="text-4xl font-black tracking-tight mb-2">Live Alerts Archive</h1>
             <p class="text-slate-400">Access the historical vault of exam notifications and job alerts.</p>
         </div>
-        
         <div class="relative mb-8">
             <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-primary">search</span>
             <input type="text" placeholder="Search alerts (PPSC, FPSC, NTS...)" class="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-primary transition-colors">
         </div>
-        
         <div class="flex flex-wrap gap-2 mb-8">
             <button class="px-6 py-2 rounded-full bg-primary text-dark font-bold text-sm">All Sources</button>
             <button class="px-6 py-2 rounded-full bg-white/5 text-slate-300 font-bold text-sm border border-white/5 hover:border-primary/50 transition-colors">PPSC</button>
             <button class="px-6 py-2 rounded-full bg-white/5 text-slate-300 font-bold text-sm border border-white/5 hover:border-primary/50 transition-colors">FPSC</button>
         </div>
-
         <div class="space-y-4">${alertHtml}</div>
     </div>`;
 }
 
-// Image 6, 7, 8: Admin Command Center (Consolidated)
+// ==========================================
+// ADMIN LOGIC & VIEWS (Refactored Modularly)
+// ==========================================
+
 function viewAdmin() {
     if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) {
         return `<h1 class="text-center text-rose-500 text-4xl font-black py-20 uppercase">Level 4 Clearance Required</h1>`;
@@ -495,112 +468,200 @@ function viewAdmin() {
 
     return `
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
-        
         <div class="lg:col-span-3 glass-panel p-6 rounded-2xl flex flex-col gap-2 h-max sticky top-32">
             <div class="flex items-center gap-3 mb-8 text-primary">
                 <span class="material-symbols-outlined text-3xl">tsunami</span>
                 <h2 class="font-black text-xl uppercase tracking-tighter">Command</h2>
             </div>
-            <button class="text-left px-4 py-3 rounded-lg bg-primary/10 text-primary font-bold flex gap-3"><span class="material-symbols-outlined">dashboard</span> Dashboard</button>
-            <button class="text-left px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 font-bold flex gap-3"><span class="material-symbols-outlined">database</span> MCQ Management</button>
-            <button class="text-left px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 font-bold flex gap-3"><span class="material-symbols-outlined">group</span> Users</button>
+            <button onclick="document.getElementById('admin-content').innerHTML = window.getAdminDash()" class="text-left px-4 py-3 rounded-lg hover:bg-white/5 text-slate-400 focus:bg-primary/10 focus:text-primary font-bold flex gap-3"><span class="material-symbols-outlined">dashboard</span> Dashboard</button>
+            <button onclick="document.getElementById('admin-content').innerHTML = window.getAdminUsers()" class="text-left px-4 py-3 rounded-lg hover:bg-white/5 text-slate-400 focus:bg-primary/10 focus:text-primary font-bold flex gap-3"><span class="material-symbols-outlined">group</span> Users</button>
             <div class="mt-auto pt-8">
                 <button onclick="window.router('dashboard')" class="text-left w-full px-4 py-3 rounded-lg text-rose-400 hover:bg-rose-500/10 font-bold flex gap-3"><span class="material-symbols-outlined">logout</span> Exit Admin</button>
             </div>
         </div>
 
-        <div class="lg:col-span-9 space-y-6">
-            <div class="grid grid-cols-3 gap-6 mb-8">
-                <div class="bg-panel border border-white/5 p-6 rounded-xl">
-                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Total MCQs</p>
-                    <p class="text-3xl font-black">${window.SHARK.mcqs.length}</p>
-                </div>
-                <div class="bg-panel border border-white/5 p-6 rounded-xl">
-                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Active Alerts</p>
-                    <p class="text-3xl font-black">${window.SHARK.alerts.length}</p>
-                </div>
-                <div class="bg-panel border border-white/5 p-6 rounded-xl">
-                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Registered Users</p>
-                    <p class="text-3xl font-black">--</p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="glass-panel p-8 rounded-2xl">
-                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2"><span class="material-symbols-outlined text-primary">add_box</span> Add New MCQ</h3>
-                    <div class="space-y-4">
-                        <textarea id="ad-q" placeholder="Question Text" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-20 outline-none focus:border-primary"></textarea>
-                        <div class="grid grid-cols-2 gap-2">
-                            <input id="ad-a" placeholder="Option A" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
-                            <input id="ad-b" placeholder="Option B" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
-                            <input id="ad-c" placeholder="Option C" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
-                            <input id="ad-d" placeholder="Option D" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <select id="ad-corr" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
-                                <option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option>
-                            </select>
-                            <select id="ad-sub" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
-                                ${window.SHARK.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
-                            </select>
-                        </div>
-                        <button onclick="pushMCQ()" class="btn-primary w-full py-3 rounded-lg text-sm">Save to Database</button>
-                    </div>
-                </div>
-
-                <div class="glass-panel p-8 rounded-2xl flex flex-col">
-                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2"><span class="material-symbols-outlined text-primary">cloud_upload</span> Bulk Upload (CSV)</h3>
-                    <div class="border-2 border-dashed border-white/20 rounded-xl flex-grow flex flex-col items-center justify-center p-8 text-center bg-black/20 relative group hover:border-primary transition-colors">
-                        <span class="material-symbols-outlined text-5xl text-slate-500 mb-4 group-hover:text-primary transition-colors">upload_file</span>
-                        <p class="font-bold mb-1">Drop CSV file here or <span class="text-primary cursor-pointer">browse</span></p>
-                        <p class="text-xs text-slate-500">Format: Question, OptA, OptB, OptC, OptD, Correct(A-D), Subject</p>
-                        <input type="file" id="csv-file" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleCSV(event)">
-                    </div>
-                </div>
-            </div>
+        <div id="admin-content" class="lg:col-span-9 space-y-6">
+            ${window.getAdminDash()} 
         </div>
     </div>`;
 }
 
-// Admin Logic
-window.pushMCQ = async () => {
+window.getAdminDash = () => `
+    <div class="grid grid-cols-3 gap-6 mb-8 animate-fade-in">
+        <div class="bg-panel border border-white/5 p-6 rounded-xl">
+            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Total MCQs</p>
+            <p class="text-3xl font-black text-white">${window.SHARK.mcqs.length}</p>
+        </div>
+        <div class="bg-panel border border-white/5 p-6 rounded-xl">
+            <p class="text-xs text-slate-400 font-bold uppercase mb-1">Active Alerts</p>
+            <p class="text-3xl font-black text-white">${window.SHARK.alerts.length}</p>
+        </div>
+        <div class="bg-panel border border-white/5 p-6 rounded-xl">
+            <p class="text-xs text-slate-400 font-bold uppercase mb-1">System Health</p>
+            <p class="text-3xl font-black text-emerald-400">100%</p>
+        </div>
+    </div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+        <div class="glass-panel p-8 rounded-2xl flex flex-col h-full">
+            <h3 class="text-xl font-bold mb-6 flex items-center gap-2"><span class="material-symbols-outlined text-primary">cloud_upload</span> Bulk Upload (CSV)</h3>
+            <div class="border-2 border-dashed border-white/20 rounded-xl flex-grow flex flex-col items-center justify-center p-10 text-center bg-black/20 relative group hover:border-primary transition-colors cursor-pointer min-h-[250px]">
+                <span class="material-symbols-outlined text-5xl text-slate-500 mb-4 group-hover:text-primary transition-colors">upload_file</span>
+                <p class="font-bold mb-1 text-lg text-white">Drop CSV file here or <span class="text-primary cursor-pointer">browse</span></p>
+                <p class="text-sm text-slate-500 mt-2 font-mono">Format: Question, OptA, OptB, OptC, OptD, Correct(A-D), Subject</p>
+                <input type="file" id="csv-file" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleCSV(event)">
+            </div>
+        </div>
+
+        <div class="glass-panel p-8 rounded-2xl flex flex-col h-full">
+            <h3 class="text-xl font-bold mb-6 flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary">campaign</span> Publish New Alert</h3>
+            <div class="space-y-4 flex-grow flex flex-col justify-between">
+                <div>
+                    <label class="text-xs text-slate-400 font-bold mb-1 block">Alert Title (English)</label>
+                    <input id="alert-title" maxlength="100" placeholder="e.g., PPSC Lecturer Jobs 2024" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 font-bold mb-1 block">Urdu Description (اردو متن)</label>
+                    <textarea id="alert-urdu" dir="rtl" maxlength="500" placeholder="یہاں تفصیل لکھیں..." class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-24 outline-none focus:border-primary urdu-text text-white transition-colors"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-xs text-slate-400 font-bold mb-1 block">Alert Type</label>
+                        <select id="alert-type" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white cursor-pointer transition-colors">
+                            <option value="NEW">NEW</option>
+                            <option value="URGENT">URGENT</option>
+                            <option value="EXPIRED">EXPIRED</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="pt-2">
+                    <p id="alert-status" class="text-xs font-bold mb-2 hidden text-center"></p>
+                    <button id="publish-btn" onclick="publishAlert()" class="btn-primary w-full py-4 rounded-lg text-sm uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span class="material-symbols-outlined text-lg hidden" id="publish-spinner">sync</span>
+                        <span id="publish-btn-text">Broadcast Alert</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+`;
+
+window.getAdminUsers = () => {
+    if(!window.SHARK.allUsers || window.SHARK.allUsers.length === 0) fetchLeaderboard(); 
+    const userRows = (window.SHARK.allUsers || []).map(u => `
+        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors text-sm">
+            <td class="py-4 px-4 flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-800 text-primary flex items-center justify-center font-bold border border-white/10">${u.name ? u.name.charAt(0) : 'U'}</div>
+                <div>
+                    <p class="font-bold text-slate-200">${u.name || 'Anonymous'}</p>
+                    <p class="text-xs text-slate-500">${u.email || 'No email'}</p>
+                </div>
+            </td>
+            <td class="py-4 px-4 text-primary font-mono font-bold">Lvl ${u.level || Math.floor(u.xp/1000)+1}</td>
+            <td class="py-4 px-4 font-mono text-white">${(u.xp || 0).toLocaleString()}</td>
+            <td class="py-4 px-4 text-slate-400">${u.joinDate && u.joinDate.seconds ? new Date(u.joinDate.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
+            <td class="py-4 px-4">
+                <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded text-xs font-bold border border-emerald-500/20">Active</span>
+            </td>
+        </tr>
+    `).join('');
+
+    return `
+    <div class="glass-panel rounded-2xl overflow-hidden animate-fade-in">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center">
+            <h3 class="text-xl font-bold flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary">manage_accounts</span> User Management</h3>
+            <span class="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-bold">${window.SHARK.allUsers?.length || 0} Total Users</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-xs text-slate-500 uppercase tracking-widest bg-black/20 border-b border-white/5">
+                        <th class="py-3 px-4 font-bold">User</th>
+                        <th class="py-3 px-4 font-bold">Level</th>
+                        <th class="py-3 px-4 font-bold">Total XP</th>
+                        <th class="py-3 px-4 font-bold">Join Date</th>
+                        <th class="py-3 px-4 font-bold">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${userRows || `<tr><td colspan="5" class="py-10 text-center text-slate-500">Loading user data...</td></tr>`}
+                </tbody>
+            </table>
+        </div>
+    </div>`;
+};
+
+window.publishAlert = async () => {
+    const title = document.getElementById('alert-title').value.trim();
+    const urdu = document.getElementById('alert-urdu').value.trim();
+    const type = document.getElementById('alert-type').value;
+    const btn = document.getElementById('publish-btn');
+    const btnText = document.getElementById('publish-btn-text');
+    const spinner = document.getElementById('publish-spinner');
+    const statusMsg = document.getElementById('alert-status');
+    
+    if(!title || !urdu) {
+        statusMsg.innerText = "Error: Please fill in both English and Urdu details.";
+        statusMsg.className = "text-xs font-bold mb-2 text-rose-500 text-center animate-fade-in block";
+        return;
+    }
+
+    btn.disabled = true;
+    btnText.innerText = "Broadcasting...";
+    spinner.classList.add('animate-spin');
+    spinner.classList.remove('hidden');
+    statusMsg.classList.add('hidden'); 
+
+    const dateOpts = { day: 'numeric', month: 'short', year: 'numeric' };
+    const formattedDate = new Date().toLocaleDateString('en-GB', dateOpts);
+
     const data = {
-        question: document.getElementById('ad-q').value,
-        optA: document.getElementById('ad-a').value,
-        optB: document.getElementById('ad-b').value,
-        optC: document.getElementById('ad-c').value,
-        optD: document.getElementById('ad-d').value,
-        correct: document.getElementById('ad-corr').value,
-        subject: document.getElementById('ad-sub').value,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        title: title,
+        urdu: urdu,
+        type: type,
+        date: formattedDate,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp() 
     };
-    if(!data.question || !data.optA) return alert("Fill required fields");
-    await db.collection('mcqs').add(data);
-    alert("MCQ Added!"); 
-    window.router('admin'); // Refresh
+
+    try {
+        await db.collection('alerts').add(data);
+        btn.classList.replace('btn-primary', 'bg-emerald-500');
+        btn.classList.add('text-dark');
+        spinner.classList.remove('animate-spin');
+        spinner.innerText = 'check_circle';
+        btnText.innerText = "Broadcast Successful!";
+        
+        document.getElementById('alert-title').value = '';
+        document.getElementById('alert-urdu').value = '';
+        
+        setTimeout(() => { window.location.reload(); }, 1500);
+    } catch(e) {
+        btn.disabled = false;
+        btnText.innerText = "Broadcast Alert";
+        spinner.classList.remove('animate-spin');
+        spinner.classList.add('hidden');
+        statusMsg.innerText = "Database Error: " + e.message;
+        statusMsg.className = "text-xs font-bold mb-2 text-rose-500 text-center animate-fade-in block";
+    }
 };
 
 window.handleCSV = (e) => {
     const file = e.target.files[0];
     if(!file) return;
     
-    // UI Feedback
     e.target.parentElement.innerHTML = `<div class="loader-ring mx-auto mb-4"></div><p class="text-primary font-bold">Encrypting & Syncing Data...</p>`;
 
     const reader = new FileReader();
     reader.onload = async (event) => {
         const text = event.target.result;
-        const rows = text.split('\n').slice(1); // Skip header row
+        const rows = text.split('\n').slice(1); 
         let count = 0;
-        const batch = db.batch(); // Firebase Batch limits to 500 writes. We'll handle up to 499 per CSV.
-        
-        // Advanced CSV Regex: Splits by comma, but ignores commas inside double quotes
+        const batch = db.batch(); 
         const csvRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
 
         rows.forEach(row => {
-            if(!row.trim()) return; // Skip empty lines
-            
-            // Split and remove quotes from the resulting strings
+            if(!row.trim()) return; 
             const cols = row.split(csvRegex).map(c => c.replace(/^"|"$/g, '').trim());
             
             if(cols.length >= 7 && cols[0]) {
@@ -611,7 +672,7 @@ window.handleCSV = (e) => {
                     optB: cols[2], 
                     optC: cols[3], 
                     optD: cols[4], 
-                    correct: cols[5].toUpperCase(), // Force A, B, C, or D
+                    correct: cols[5].toUpperCase(), 
                     subject: cols[6],
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
@@ -626,24 +687,28 @@ window.handleCSV = (e) => {
                 window.location.reload();
             } catch(error) {
                 alert("Sync Error: " + error.message);
+                window.location.reload();
             }
         } else if (count > 500) {
-            alert("Please limit CSV to 500 questions per upload to respect Firestore Free Tier batch limits.");
+            alert("Please limit your CSV file to 500 questions per upload to respect Firestore Free Tier batch limits.");
             window.location.reload();
         } else {
-            alert("Format Error: Ensure your CSV has 7 columns.");
+            alert("Format Error: No valid questions found. Ensure your CSV has 7 columns.");
             window.location.reload();
         }
     };
     reader.readAsText(file);
 };
 
-// Image 9/10: Leaderboard
+// ==========================================
+// LEADERBOARD & UTILITIES
+// ==========================================
+
 async function fetchLeaderboard() {
     try {
         const snap = await db.collection('users').orderBy('xp', 'desc').limit(50).get();
         window.SHARK.allUsers = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        window.router('leaderboard'); // Re-render with data
+        window.router('leaderboard'); 
     } catch(e) { console.error(e); }
 }
 
@@ -700,7 +765,6 @@ function viewLeaderboard() {
     </div>`;
 }
 
-// Utility: Inject Dummy Data if DB is empty (For immediate visual validation)
 function populateDummyData() {
     window.SHARK.alerts = [
         { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" },
