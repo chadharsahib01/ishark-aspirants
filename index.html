@@ -3,46 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>I-SHARK | Elite Aspirant Portal</title>
+    <title>I-SHARK | Elite Prep</title>
     
-    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { primary: '#0df2f2', dark: '#080c0c', panel: '#111a1a' },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="text-slate-100 selection:bg-cyan-500/30 antialiased">
+<body class="bg-dark text-slate-200 antialiased selection:bg-primary/30">
 
-    <nav class="fixed top-0 left-0 w-full z-50 nav-blur px-6 py-4">
-        <div class="max-w-6xl mx-auto flex justify-between items-center">
-            <div class="flex items-center gap-3 cursor-pointer" onclick="window.router('home')">
+    <nav class="fixed top-0 w-full z-50 bg-dark/90 backdrop-blur-md border-b border-white/5 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="window.router('dashboard')">
                 <span class="text-primary material-symbols-outlined text-3xl">tsunami</span>
-                <h1 class="text-xl font-black tracking-tighter uppercase italic">I-SHARK</h1>
+                <h1 class="text-2xl font-black tracking-tighter uppercase italic">I-SHARK</h1>
             </div>
             
-            <div id="auth-layer">
-                <button id="login-btn" onclick="window.login()" class="text-xs font-black uppercase tracking-widest text-primary hover:text-white transition-colors">Login</button>
+            <div id="nav-links" class="hidden md:flex gap-6 text-sm font-bold text-slate-400">
+                <button onclick="window.router('vault')" class="hover:text-primary transition-colors">Vault</button>
+                <button onclick="window.router('alerts')" class="hover:text-primary transition-colors">Alerts</button>
+                <button onclick="window.router('leaderboard')" class="hover:text-primary transition-colors">Leaderboard</button>
+            </div>
+
+            <div id="auth-layer" class="flex items-center gap-4">
+                <button id="login-btn" onclick="window.login()" class="btn-primary px-4 py-2 rounded-lg text-sm">LOGIN / SYNC</button>
                 <div id="user-profile" class="hidden flex items-center gap-4">
-                    <span id="nav-xp" class="text-xs font-mono text-cyan-400">0 XP</span>
-                    <div id="admin-link" class="hidden cursor-pointer text-xs font-bold text-red-400 border border-red-400/30 px-2 py-1 rounded" onclick="window.router('admin')">ADMIN</div>
-                    <div class="h-9 w-9 rounded-full border border-primary/30 flex items-center justify-center bg-primary/10 text-primary font-bold cursor-pointer hover:bg-primary hover:text-black transition-all" onclick="window.logout()">
-                        <span id="user-initial">?</span>
+                    <div class="text-right hidden sm:block">
+                        <p class="text-[10px] text-primary font-bold tracking-widest uppercase">Experience</p>
+                        <p class="text-xs font-mono">Level <span id="nav-level">1</span> • <span id="nav-xp">0</span> XP</p>
+                    </div>
+                    <div class="relative group">
+                        <div class="h-10 w-10 rounded-full border-2 border-primary/30 flex items-center justify-center bg-primary/10 text-primary font-bold cursor-pointer transition-all group-hover:border-primary">
+                            <span id="user-initial">U</span>
+                        </div>
+                        <div class="absolute right-0 mt-2 w-48 glass-panel rounded-xl py-2 hidden group-hover:block">
+                            <button id="admin-link" onclick="window.router('admin')" class="hidden w-full text-left px-4 py-2 text-sm text-primary hover:bg-white/5 font-bold">Command Center</button>
+                            <button onclick="window.logout()" class="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 font-bold">Sign Out</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </nav>
 
-    <main id="view-container" class="pt-32 pb-20 px-6 max-w-6xl mx-auto min-h-screen">
-        <div id="boot-loader" class="flex flex-col items-center justify-center py-40">
-            <div class="loader-ring"></div>
-            <p class="mt-4 text-[10px] font-black uppercase tracking-[0.3em] text-primary animate-pulse">Establishing Secure Link</p>
+    <main id="view-container" class="pt-28 pb-20 px-4 sm:px-6 max-w-7xl mx-auto min-h-screen">
+        <div class="flex items-center justify-center h-[60vh] animate-pulse">
+            <span class="text-primary material-symbols-outlined text-6xl animate-spin">autorenew</span>
         </div>
     </main>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-    
     <script src="app.js"></script>
 </body>
 </html>

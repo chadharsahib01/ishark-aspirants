@@ -1,6 +1,6 @@
 /**
- * I-SHARK MASTER CORE v3.1 
- * Verified: Firebase v10 Compat | Production Ready
+ * I-SHARK ENTERPRISE CORE
+ * Architecture: Serverless SPA via Vanilla ES6
  */
 
 const firebaseConfig = {
@@ -12,261 +12,641 @@ const firebaseConfig = {
     appId: "1:304378182943:web:305b03b013367c8ff1c42a"
 };
 
-// Initialize
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 const ADMIN_EMAIL = "makkahmarble3@gmail.com";
 
-window.SHARK = { 
-    user: null, 
-    mcqs: [], 
-    notifications: [], 
-    subjects: [], 
-    xp: parseInt(localStorage.getItem('user_xp')) || 0 
+// --- GLOBAL STATE ---
+window.SHARK = {
+    user: null,
+    userData: { xp: 0, level: 1, quizzesTaken: 0, hours: 0 },
+    mcqs: [],
+    alerts: [],
+    allUsers: [],
+    subjects: ['General Knowledge', 'Pakistan Affairs', 'Islamiyat', 'Everyday Science', 'English', 'Current Affairs'],
+    quizSession: { active: false, subject: '', pool: [], index: 0, score: 0, timeStart: null, history: [] }
 };
 
-let quizState = { active: false, pool: [], index: 0, score: 0 };
-
-// 1. AUTH ACTIONS
+// --- AUTHENTICATION ---
 window.login = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(console.error);
+    auth.signInWithPopup(provider).catch(e => alert("Login Failed: " + e.message));
 };
 
-window.logout = () => {
-    auth.signOut().then(() => { 
-        localStorage.clear(); 
-        window.location.reload(); 
-    });
-};
+window.logout = () => auth.signOut().then(() => window.location.reload());
 
-// 2. ROUTER & VIEWS
-window.router = function(view) {
-    const cont = document.getElementById("view-container");
-    if(!cont) return;
+auth.onAuthStateChanged(async (user) => {
+    if (user) {
+        window.SHARK.user = user;
+        // Sync user doc
+        const userRef = db.collection('users').doc(user.uid);
+        const doc = await userRef.get();
+        if(!doc.exists) {
+            await userRef.set({ name: user.displayName, email: user.email, xp: 0, level: 1, joinDate: new Date() });
+        } else {
+            window.SHARK.userData = { ...window.SHARK.userData, ...doc.data() };
+        }
+        updateNav();
+        if(document.getElementById('view-container').innerHTML.includes('autorenew')) initApp();
+    } else {
+        window.SHARK.user = null;
+        initApp(); // Boot as guest
+    }
+});
+
+// --- BOOTSTRAP ---
+async function initApp() {
+    try {
+        const [mcqSnap, alertSnap] = await Promise.all([
+            db.collection("mcqs").limit(500).get(), // Limit for performance
+            db.collection("alerts").orderBy("date", "desc").limit(20).get()
+        ]);
+        window.SHARK.mcqs = mcqSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        window.SHARK.alerts = alertSnap.docs.map(d => ({id: d.id, ...d.data()}));
+        
+        // Populate dummy data if DB is empty to show UI
+        if(window.SHARK.mcqs.length === 0) populateDummyData();
+
+        window.router('dashboard');
+    } catch(e) {
+        console.error(e);
+        document.getElementById("view-container").innerHTML = `<div class="text-red-500 p-10 text-center font-mono">CRITICAL DB LINK FAILURE</div>`;
+    }
+}
+
+function updateNav() {
+    const u = window.SHARK.user;
+    if(!u) return;
+    document.getElementById('login-btn').classList.add('hidden');
+    document.getElementById('user-profile').classList.remove('hidden');
+    document.getElementById('user-initial').innerText = u.displayName ? u.displayName.charAt(0) : 'S';
+    document.getElementById('nav-xp').innerText = window.SHARK.userData.xp.toLocaleString();
+    document.getElementById('nav-level').innerText = window.SHARK.userData.level;
     
-    // Smooth transition
-    cont.classList.remove('animate-view');
-    void cont.offsetWidth; // Trigger reflow
-    cont.classList.add('animate-view');
+    if(u.email === ADMIN_EMAIL) {
+        document.getElementById('admin-link').classList.remove('hidden');
+    }
+}
+
+// --- ROUTER ---
+window.router = (view) => {
+    const cont = document.getElementById("view-container");
+    cont.classList.remove('animate-fade-in');
+    void cont.offsetWidth; 
+    cont.classList.add('animate-fade-in');
+    window.scrollTo(0,0);
 
     switch(view) {
-        case "home": renderHome(cont); break;
-        case "vault": renderVault(cont); break;
-        case "admin": renderAdmin(cont); break;
-        case "quiz": renderQuiz(cont); break;
-        default: renderHome(cont);
+        case 'dashboard': cont.innerHTML = viewDashboard(); break;
+        case 'vault': cont.innerHTML = viewVault(); break;
+        case 'quiz': cont.innerHTML = viewQuiz(); startTimer(); break;
+        case 'analysis': cont.innerHTML = viewAnalysis(); break;
+        case 'alerts': cont.innerHTML = viewAlerts(); break;
+        case 'leaderboard': cont.innerHTML = viewLeaderboard(); fetchLeaderboard(); break;
+        case 'admin': cont.innerHTML = viewAdmin(); break;
+        default: cont.innerHTML = viewDashboard();
     }
-    window.scrollTo(0,0);
 };
 
-// 3. UI RENDERING
-function renderHome(cont) {
-    const alerts = window.SHARK.notifications.length ? window.SHARK.notifications.map(n => `
-        <div class="glass-panel p-5 rounded-2xl mb-4 flex justify-between items-center group hover:border-primary/40 transition-all">
-            <div class="flex flex-col">
-                <span class="text-[10px] text-primary font-bold uppercase tracking-tighter mb-1">${n.Date || 'Update'}</span>
-                <a href="${n.Link || '#'}" target="_blank" class="font-bold text-slate-100 urdu-text text-xl group-hover:text-primary transition-colors">${n.Title}</a>
-            </div>
-            <span class="material-symbols-outlined text-slate-600 group-hover:text-primary">arrow_outward</span>
-        </div>`).join('') : `<div class="p-10 text-center opacity-40 italic">Scanning for new alerts...</div>`;
+// ==========================================
+// VIEWS (UI GENERATORS matching Images)
+// ==========================================
 
-    cont.innerHTML = `
-        <div class="space-y-10">
-            <header class="flex justify-between items-end">
+// Image 1: Student Dashboard
+function viewDashboard() {
+    const latestAlert = window.SHARK.alerts[0] || { title: "No recent updates", urdu: "کوئی تازہ ترین اپ ڈیٹ نہیں" };
+    const xp = window.SHARK.userData.xp;
+    
+    return `
+    <div class="space-y-6">
+        <div>
+            <h1 class="text-4xl font-black tracking-tight mb-1">Student Dashboard</h1>
+            <p class="text-slate-400">Welcome back, Scholar. Your path to excellence starts here.</p>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col sm:flex-row relative">
+                <div class="w-full sm:w-1/3 bg-cover bg-center h-48 sm:h-auto" style="background-image: url('https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&q=80');"></div>
+                <div class="p-8 w-full sm:w-2/3">
+                    <span class="text-[10px] font-bold text-primary tracking-widest uppercase mb-2 block flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span> Live Recruitment Updates
+                    </span>
+                    <h2 class="text-2xl font-bold mb-4">PPSC/FPSC Alerts</h2>
+                    <p class="urdu-text text-xl text-slate-300 mb-6">${latestAlert.urdu || latestAlert.title}</p>
+                    <button onclick="window.router('alerts')" class="btn-primary px-6 py-2 rounded-lg text-sm flex items-center gap-2 w-max">
+                        View All Alerts <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-8 flex flex-col justify-between">
                 <div>
-                    <p class="text-primary font-black uppercase tracking-[0.4em] text-[10px] mb-2">Operational Dashboard</p>
-                    <h1 class="text-5xl font-black italic uppercase tracking-tighter">Command Center</h1>
-                </div>
-                <div class="text-right hidden md:block">
-                    <p class="text-slate-500 text-xs font-mono uppercase">System Status</p>
-                    <p class="text-green-400 text-xs font-bold uppercase animate-pulse">● All Systems Online</p>
-                </div>
-            </header>
-
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div class="lg:col-span-8">
-                    <h3 class="text-slate-400 font-bold uppercase text-[10px] mb-6 tracking-widest flex items-center gap-2">
-                        <span class="w-8 h-[1px] bg-primary/30"></span> Public Notifications
-                    </h3>
-                    ${alerts}
-                </div>
-                <div class="lg:col-span-4 space-y-6">
-                    <div class="glass-panel p-8 rounded-3xl border-t-primary/20">
-                        <h3 class="text-2xl font-black italic mb-2 tracking-tight">QUIZ VAULT</h3>
-                        <p class="text-slate-400 text-sm mb-6">Access encrypted question banks for PPSC/FPSC preparation.</p>
-                        <button onclick="window.router('vault')" class="btn-primary w-full py-4 text-sm">Initialize Vault</button>
+                    <div class="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-4 border border-white/10">
+                        <span class="material-symbols-outlined text-primary">quiz</span>
                     </div>
+                    <h2 class="text-xl font-bold mb-2">Quiz System</h2>
+                    <p class="text-sm text-slate-400 mb-6">Challenge yourself with time-bound mock exams tailored for competitive testing.</p>
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-2 uppercase tracking-wide">
+                        <span class="text-slate-500">Daily Goal</span>
+                        <span class="text-primary">75% Complete</span>
+                    </div>
+                    <div class="w-full bg-white/5 rounded-full h-1.5 mb-4"><div class="bg-primary h-1.5 rounded-full" style="width: 75%"></div></div>
+                    <button onclick="window.router('vault')" class="btn-ghost w-full py-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm">
+                        <span class="material-symbols-outlined text-lg">play_arrow</span> Start Quiz
+                    </button>
                 </div>
             </div>
-        </div>`;
-    updateProfileUI();
-}
+        </div>
 
-function renderVault(cont) {
-    const cards = window.SHARK.subjects.map(s => `
-        <div onclick="window.initQuiz('${s}')" class="glass-panel p-10 rounded-3xl cursor-pointer group hover:border-primary transition-all">
-            <span class="material-symbols-outlined text-4xl text-primary/40 group-hover:text-primary transition-colors">folder_open</span>
-            <h3 class="text-2xl font-black italic uppercase mt-4 group-hover:translate-x-1 transition-transform">${s}</h3>
-            <p class="text-slate-500 text-xs mt-2 uppercase tracking-widest">Question Bank Active</p>
-        </div>`).join('');
-    
-    cont.innerHTML = `
-        <div class="space-y-8">
-            <button onclick="window.router('home')" class="text-slate-500 hover:text-primary flex items-center gap-2 text-xs font-bold uppercase transition-colors">
-                <span class="material-symbols-outlined text-sm">arrow_back</span> Return to Base
-            </button>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">${cards || '<p class="p-20 text-center opacity-50">No Data Modules Found</p>'}</div>
-        </div>`;
-}
-
-// 4. QUIZ ENGINE (FIXED)
-window.initQuiz = function(subject) {
-    const pool = window.SHARK.mcqs.filter(m => m.Subject === subject);
-    if(pool.length === 0) return alert("Empty Module");
-    
-    quizState = {
-        active: true,
-        pool: pool.sort(() => 0.5 - Math.random()), // Shuffle
-        index: 0,
-        score: 0,
-        subject: subject
-    };
-    window.router('quiz');
-};
-
-function renderQuiz(cont) {
-    const q = quizState.pool[quizState.index];
-    if(!q) {
-        renderResults(cont);
-        return;
-    }
-
-    cont.innerHTML = `
-        <div class="max-w-2xl mx-auto">
-            <div class="flex justify-between items-center mb-10">
-                <span class="text-xs font-mono text-primary uppercase">${quizState.subject} // Module</span>
-                <span class="text-xs font-mono text-slate-500">${quizState.index + 1} / ${quizState.pool.length}</span>
-            </div>
-            <div class="glass-panel p-10 rounded-3xl">
-                <h2 class="text-2xl font-bold leading-relaxed mb-8">${q.Question}</h2>
-                <div class="space-y-3">
-                    ${['A','B','C','D'].map(opt => `
-                        <button onclick="window.submitAnswer('${opt}')" class="quiz-option">
-                            <span class="text-primary font-bold mr-3">${opt}.</span> ${q['Option'+opt]}
-                        </button>
-                    `).join('')}
+        <div class="glass-panel rounded-2xl p-8">
+            <div class="flex justify-between items-start mb-8">
+                <div>
+                    <h2 class="text-xl font-bold">Study Progress</h2>
+                    <p class="text-sm text-slate-400">Visualizing your academic journey this month.</p>
+                </div>
+                <div class="bg-white/5 rounded-full p-1 flex text-xs font-bold">
+                    <button class="px-4 py-1.5 rounded-full bg-primary/20 text-primary">WEEKLY</button>
+                    <button class="px-4 py-1.5 rounded-full text-slate-400">MONTHLY</button>
                 </div>
             </div>
-        </div>`;
-}
 
-window.submitAnswer = function(choice) {
-    const q = quizState.pool[quizState.index];
-    if(choice === q.CorrectOption) {
-        quizState.score++;
-        window.SHARK.xp += 10;
-        localStorage.setItem('user_xp', window.SHARK.xp);
-    }
-    quizState.index++;
-    updateProfileUI();
-    renderQuiz(document.getElementById("view-container"));
-};
-
-function renderResults(cont) {
-    cont.innerHTML = `
-        <div class="text-center py-20 animate-view">
-            <h2 class="text-6xl font-black italic text-primary mb-4">COMPLETE</h2>
-            <p class="text-xl text-slate-400 mb-8">Accuracy: ${((quizState.score/quizState.pool.length)*100).toFixed(0)}%</p>
-            <button onclick="window.router('vault')" class="btn-primary">Back to Vault</button>
-        </div>`;
-}
-
-// 5. ADMIN ACTIONS
-function renderAdmin(cont) {
-    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) {
-        cont.innerHTML = `<h1 class="text-red-500 font-black py-20 text-center uppercase tracking-widest">Access Denied: Level 4 Security Required</h1>`;
-        return;
-    }
-    cont.innerHTML = `<div class="glass-panel p-10 rounded-3xl space-y-6 max-w-2xl mx-auto">
-        <h2 class="text-3xl font-black text-primary italic uppercase tracking-tighter">Push Data Module</h2>
-        <div class="space-y-4">
-            <input id="m-q" placeholder="The Question..." class="w-full bg-black/40 p-4 rounded-xl border border-white/10 focus:border-primary outline-none">
-            <div class="grid grid-cols-2 gap-4">
-                <input id="m-a" placeholder="Option A" class="bg-black/40 p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                <input id="m-b" placeholder="Option B" class="bg-black/40 p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                <input id="m-c" placeholder="Option C" class="bg-black/40 p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
-                <input id="m-d" placeholder="Option D" class="bg-black/40 p-3 rounded-xl border border-white/10 outline-none focus:border-primary">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Hours Studied</p>
+                    <p class="text-3xl font-black">${window.SHARK.userData.hours || '12.5'}</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Quizzes Taken</p>
+                    <p class="text-3xl font-black">${window.SHARK.userData.quizzesTaken || 0}</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Avg. Score</p>
+                    <p class="text-3xl font-black">88%</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Global Rank</p>
+                    <p class="text-3xl font-black">#142</p>
+                </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
-                <input id="m-correct" placeholder="Correct Key (A,B,C, or D)" class="bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-primary">
-                <input id="m-sub" placeholder="Module Subject" class="bg-black/40 p-4 rounded-xl border border-white/10 outline-none focus:border-primary">
+
+            <div class="h-24 flex items-end gap-2 px-2 bg-gradient-to-t from-primary/5 to-transparent rounded-lg pt-4">
+                ${[30,40,25,35,80,50,40,45,60,30].map(h => `<div class="w-full rounded-t-sm stat-bar ${h===80?'active':''}" style="height: ${h}%"></div>`).join('')}
             </div>
-            <button onclick="window.adminPush()" class="btn-primary w-full py-5 mt-4">Broadcast to Firestore</button>
         </div>
     </div>`;
 }
 
-window.adminPush = async function() {
-    const data = {
-        Question: document.getElementById('m-q').value,
-        OptionA: document.getElementById('m-a').value,
-        OptionB: document.getElementById('m-b').value,
-        OptionC: document.getElementById('m-c').value,
-        OptionD: document.getElementById('m-d').value,
-        CorrectOption: document.getElementById('m-correct').value.toUpperCase(),
-        Subject: document.getElementById('m-sub').value,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    try {
-        await db.collection('mcqs').add(data);
-        alert("Encrypted & Synced!"); window.location.reload();
-    } catch(e) { alert("Sync Error: " + e.message); }
+// Image 2: Subject Vault
+function viewVault() {
+    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper' };
+    
+    const cards = window.SHARK.subjects.map(s => {
+        const count = window.SHARK.mcqs.filter(m => m.subject === s).length;
+        return `
+        <div onclick="window.initQuiz('${s}')" class="glass-panel p-8 rounded-2xl cursor-pointer group relative overflow-hidden">
+            <div class="absolute top-6 right-6 px-2 py-1 bg-primary/20 text-primary text-[10px] font-bold rounded uppercase">Active</div>
+            <div class="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-colors">
+                <span class="material-symbols-outlined text-primary text-2xl">${icons[s] || 'folder'}</span>
+            </div>
+            <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">${s}</h3>
+            <p class="text-sm text-slate-400 mb-6">Master core concepts and historical data. Contains ${count} questions.</p>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="space-y-8 max-w-5xl mx-auto">
+        <div>
+            <h1 class="text-4xl font-black tracking-tight mb-2">Subject Vault</h1>
+            <p class="text-slate-400">Choose your field of study to begin practice. Master each category.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${cards}</div>
+    </div>`;
+}
+
+// Image 3: Quiz Interface Logic
+window.initQuiz = (subject) => {
+    let pool = window.SHARK.mcqs.filter(m => m.subject === subject);
+    if(pool.length < 5) return alert("Not enough questions in this category yet.");
+    
+    // Shuffle and pick 10
+    pool = pool.sort(() => 0.5 - Math.random()).slice(0, 10);
+    
+    window.SHARK.quizSession = { active: true, subject, pool, index: 0, score: 0, timeStart: Date.now(), history: [] };
+    window.router('quiz');
 };
 
-// 6. SYSTEM BOOT
-async function boot() {
+let quizTimer;
+function startTimer() {
+    let sec = 0;
+    clearInterval(quizTimer);
+    quizTimer = setInterval(() => {
+        sec++;
+        const el = document.getElementById('q-timer');
+        if(el) el.innerText = `${Math.floor(sec/60).toString().padStart(2,'0')}:${(sec%60).toString().padStart(2,'0')}`;
+    }, 1000);
+}
+
+function viewQuiz() {
+    const qs = window.SHARK.quizSession;
+    const q = qs.pool[qs.index];
+    if(!q) return finalizeQuiz();
+
+    return `
+    <div class="max-w-3xl mx-auto py-10">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <p class="text-[10px] text-primary font-bold uppercase tracking-widest">${qs.subject.toUpperCase()} MASTERY</p>
+                <p class="text-sm text-slate-400">Question ${qs.index + 1} of ${qs.pool.length}</p>
+            </div>
+            <div class="flex items-center gap-2 text-primary font-mono text-lg font-bold">
+                <span class="material-symbols-outlined">timer</span> <span id="q-timer">00:00</span>
+            </div>
+        </div>
+
+        <div class="glass-panel p-10 rounded-3xl relative">
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-panel border border-white/10 px-4 py-1 rounded-full text-[10px] text-slate-400 uppercase tracking-widest font-bold">High Stakes</div>
+            
+            <h2 class="text-3xl font-bold text-center leading-tight mb-10">${q.question}</h2>
+            
+            ${q.image ? `<img src="${q.image}" class="w-full rounded-xl mb-8 border border-white/10">` : ''}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="options-container">
+                ${['A','B','C','D'].map(opt => `
+                    <button onclick="window.selectOption('${opt}')" id="opt-btn-${opt}" class="w-full text-left p-4 rounded-xl border border-white/10 bg-white/5 hover:border-primary/50 hover:bg-white/10 transition-all flex items-center justify-between group">
+                        <div class="flex items-center gap-4">
+                            <span class="w-8 h-8 rounded-lg bg-white/10 text-primary font-bold flex items-center justify-center text-sm group-hover:bg-primary/20">${opt}</span>
+                            <span class="font-medium">${q['opt'+opt]}</span>
+                        </div>
+                        <div class="w-4 h-4 rounded-full border-2 border-slate-600"></div>
+                    </button>
+                `).join('')}
+            </div>
+            
+            <div class="mt-10 text-center">
+                <button onclick="window.submitAnswer()" id="submit-ans-btn" class="btn-primary px-8 py-3 rounded-xl flex items-center gap-2 mx-auto disabled:opacity-50" disabled>
+                    SUBMIT SELECTION <span class="material-symbols-outlined">arrow_forward</span>
+                </button>
+            </div>
+        </div>
+    </div>`;
+}
+
+let currentSelection = null;
+window.selectOption = (opt) => {
+    currentSelection = opt;
+    ['A','B','C','D'].forEach(o => {
+        const btn = document.getElementById(`opt-btn-${o}`);
+        btn.classList.remove('border-primary', 'bg-primary/10');
+        btn.querySelector('div:last-child').classList.remove('border-primary', 'bg-primary');
+    });
+    const selected = document.getElementById(`opt-btn-${opt}`);
+    selected.classList.add('border-primary', 'bg-primary/10');
+    selected.querySelector('div:last-child').classList.add('border-primary', 'bg-primary');
+    document.getElementById('submit-ans-btn').disabled = false;
+};
+
+window.submitAnswer = () => {
+    const qs = window.SHARK.quizSession;
+    const q = qs.pool[qs.index];
+    const isCorrect = currentSelection === q.correct;
+    
+    if(isCorrect) qs.score++;
+    qs.history.push({ q, selected: currentSelection, isCorrect });
+    
+    currentSelection = null;
+    qs.index++;
+    
+    if(qs.index >= qs.pool.length) finalizeQuiz();
+    else window.router('quiz'); // re-render next q
+};
+
+function finalizeQuiz() {
+    clearInterval(quizTimer);
+    const qs = window.SHARK.quizSession;
+    const timeSpent = Math.floor((Date.now() - qs.timeStart) / 1000);
+    const xpEarned = qs.score * 50;
+    
+    qs.finalTime = `${Math.floor(timeSpent/60)}:${(timeSpent%60).toString().padStart(2,'0')}`;
+    qs.xpEarned = xpEarned;
+
+    // Update Firebase if user exists
+    if(window.SHARK.user) {
+        window.SHARK.userData.xp += xpEarned;
+        window.SHARK.userData.quizzesTaken = (window.SHARK.userData.quizzesTaken || 0) + 1;
+        db.collection('users').doc(window.SHARK.user.uid).update({
+            xp: firebase.firestore.FieldValue.increment(xpEarned),
+            quizzesTaken: firebase.firestore.FieldValue.increment(1)
+        });
+    }
+
+    window.router('analysis');
+}
+
+// Image 4: Quiz Analysis
+function viewAnalysis() {
+    const qs = window.SHARK.quizSession;
+    const percent = Math.round((qs.score / qs.pool.length) * 100);
+
+    const reviewCards = qs.history.map((h, i) => `
+        <div class="glass-panel p-6 rounded-xl border-l-4 ${h.isCorrect ? 'border-l-emerald-500' : 'border-l-rose-500'}">
+            <div class="flex justify-between items-center mb-4">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Question ${i+1}</span>
+                <span class="material-symbols-outlined ${h.isCorrect ? 'text-emerald-500' : 'text-rose-500'}">${h.isCorrect ? 'check_circle' : 'cancel'}</span>
+            </div>
+            <p class="font-bold mb-4">${h.q.question}</p>
+            <div class="bg-white/5 p-4 rounded-lg mb-2 ${h.isCorrect ? '' : 'border border-rose-500/30'}">
+                <span class="text-xs text-slate-400 block mb-1">Your Answer:</span>
+                <p class="${h.isCorrect ? 'text-emerald-400' : 'text-rose-400'}">${h.q['opt'+h.selected]}</p>
+            </div>
+            ${!h.isCorrect ? `
+            <div class="bg-primary/10 border border-primary/20 p-4 rounded-lg">
+                <span class="text-xs text-primary block mb-1 font-bold">Correct Answer:</span>
+                <p class="text-white">${h.q['opt'+h.q.correct]}</p>
+                ${h.q.explanation ? `<p class="text-xs text-slate-400 mt-2">${h.q.explanation}</p>` : ''}
+            </div>` : ''}
+        </div>
+    `).join('');
+
+    return `
+    <div class="max-w-4xl mx-auto space-y-8 py-8">
+        <div>
+            <h1 class="text-4xl font-black tracking-tight mb-2">Quiz Analysis</h1>
+            <p class="text-slate-400">Detailed breakdown of your "${qs.subject}" session.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="glass-panel p-6 rounded-2xl">
+                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Total Score</p>
+                <p class="text-4xl font-black mb-1">${qs.score}/${qs.pool.length}</p>
+                <p class="text-sm ${percent >= 50 ? 'text-emerald-400' : 'text-rose-400'}">${percent}% Accuracy</p>
+            </div>
+            <div class="glass-panel p-6 rounded-2xl relative overflow-hidden">
+                <span class="material-symbols-outlined absolute -right-4 -bottom-4 text-9xl text-white/5">bolt</span>
+                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">XP Gained</p>
+                <p class="text-4xl font-black text-primary mb-1 neon-text">+${qs.xpEarned} XP</p>
+                <p class="text-sm text-primary font-bold">Keep grinding!</p>
+            </div>
+            <div class="glass-panel p-6 rounded-2xl">
+                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Time Spent</p>
+                <p class="text-4xl font-black mb-4">${qs.finalTime}</p>
+                <div class="w-full bg-white/10 h-1.5 rounded-full"><div class="bg-primary h-1.5 rounded-full w-1/2"></div></div>
+            </div>
+        </div>
+
+        <div class="flex justify-between items-center mt-10 mb-4">
+            <h2 class="text-2xl font-bold">Review Questions</h2>
+            <div class="flex gap-2 text-xs font-bold">
+                <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded">${qs.score} Correct</span>
+                <span class="px-3 py-1 bg-rose-500/20 text-rose-400 rounded">${qs.pool.length - qs.score} Incorrect</span>
+            </div>
+        </div>
+        
+        <div class="space-y-4">${reviewCards}</div>
+
+        <div class="flex gap-4 mt-8">
+            <button onclick="window.router('dashboard')" class="btn-primary w-full py-4 rounded-xl text-lg flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined">dashboard</span> Back to Dashboard
+            </button>
+        </div>
+    </div>`;
+}
+
+// Image 5: Alerts Archive
+function viewAlerts() {
+    const alertHtml = window.SHARK.alerts.map(a => `
+        <div class="glass-panel p-6 rounded-2xl flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div>
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase ${a.type === 'NEW' ? 'bg-primary/20 text-primary' : a.type === 'EXPIRED' ? 'bg-slate-800 text-slate-400' : 'bg-rose-500/20 text-rose-400'}">${a.type}</span>
+                    <span class="text-xs text-slate-500 flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> ${a.date}</span>
+                </div>
+                <h3 class="urdu-text text-2xl font-bold mb-2">${a.urdu}</h3>
+                <p class="text-sm text-slate-400">${a.title}</p>
+            </div>
+            <div class="flex flex-col gap-2 min-w-[120px]">
+                <button class="btn-ghost px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                    ${a.type === 'EXPIRED' ? 'Closed' : 'View Details'}
+                </button>
+                <button class="text-slate-500 hover:text-primary flex justify-center"><span class="material-symbols-outlined">bookmark</span></button>
+            </div>
+        </div>
+    `).join('');
+
+    return `
+    <div class="max-w-4xl mx-auto space-y-6">
+        <div>
+            <h1 class="text-4xl font-black tracking-tight mb-2">Live Alerts Archive</h1>
+            <p class="text-slate-400">Access the historical vault of exam notifications and job alerts.</p>
+        </div>
+        
+        <div class="relative mb-8">
+            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-primary">search</span>
+            <input type="text" placeholder="Search alerts (PPSC, FPSC, NTS...)" class="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-primary transition-colors">
+        </div>
+        
+        <div class="flex flex-wrap gap-2 mb-8">
+            <button class="px-6 py-2 rounded-full bg-primary text-dark font-bold text-sm">All Sources</button>
+            <button class="px-6 py-2 rounded-full bg-white/5 text-slate-300 font-bold text-sm border border-white/5 hover:border-primary/50 transition-colors">PPSC</button>
+            <button class="px-6 py-2 rounded-full bg-white/5 text-slate-300 font-bold text-sm border border-white/5 hover:border-primary/50 transition-colors">FPSC</button>
+        </div>
+
+        <div class="space-y-4">${alertHtml}</div>
+    </div>`;
+}
+
+// Image 6, 7, 8: Admin Command Center (Consolidated)
+function viewAdmin() {
+    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) {
+        return `<h1 class="text-center text-rose-500 text-4xl font-black py-20 uppercase">Level 4 Clearance Required</h1>`;
+    }
+
+    return `
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
+        
+        <div class="lg:col-span-3 glass-panel p-6 rounded-2xl flex flex-col gap-2 h-max sticky top-32">
+            <div class="flex items-center gap-3 mb-8 text-primary">
+                <span class="material-symbols-outlined text-3xl">tsunami</span>
+                <h2 class="font-black text-xl uppercase tracking-tighter">Command</h2>
+            </div>
+            <button class="text-left px-4 py-3 rounded-lg bg-primary/10 text-primary font-bold flex gap-3"><span class="material-symbols-outlined">dashboard</span> Dashboard</button>
+            <button class="text-left px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 font-bold flex gap-3"><span class="material-symbols-outlined">database</span> MCQ Management</button>
+            <button class="text-left px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 font-bold flex gap-3"><span class="material-symbols-outlined">group</span> Users</button>
+            <div class="mt-auto pt-8">
+                <button onclick="window.router('dashboard')" class="text-left w-full px-4 py-3 rounded-lg text-rose-400 hover:bg-rose-500/10 font-bold flex gap-3"><span class="material-symbols-outlined">logout</span> Exit Admin</button>
+            </div>
+        </div>
+
+        <div class="lg:col-span-9 space-y-6">
+            <div class="grid grid-cols-3 gap-6 mb-8">
+                <div class="bg-panel border border-white/5 p-6 rounded-xl">
+                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Total MCQs</p>
+                    <p class="text-3xl font-black">${window.SHARK.mcqs.length}</p>
+                </div>
+                <div class="bg-panel border border-white/5 p-6 rounded-xl">
+                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Active Alerts</p>
+                    <p class="text-3xl font-black">${window.SHARK.alerts.length}</p>
+                </div>
+                <div class="bg-panel border border-white/5 p-6 rounded-xl">
+                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Registered Users</p>
+                    <p class="text-3xl font-black">--</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass-panel p-8 rounded-2xl">
+                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2"><span class="material-symbols-outlined text-primary">add_box</span> Add New MCQ</h3>
+                    <div class="space-y-4">
+                        <textarea id="ad-q" placeholder="Question Text" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-20 outline-none focus:border-primary"></textarea>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input id="ad-a" placeholder="Option A" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
+                            <input id="ad-b" placeholder="Option B" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
+                            <input id="ad-c" placeholder="Option C" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
+                            <input id="ad-d" placeholder="Option D" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="ad-corr" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
+                                <option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option>
+                            </select>
+                            <select id="ad-sub" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary">
+                                ${window.SHARK.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                            </select>
+                        </div>
+                        <button onclick="pushMCQ()" class="btn-primary w-full py-3 rounded-lg text-sm">Save to Database</button>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-8 rounded-2xl flex flex-col">
+                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2"><span class="material-symbols-outlined text-primary">cloud_upload</span> Bulk Upload (CSV)</h3>
+                    <div class="border-2 border-dashed border-white/20 rounded-xl flex-grow flex flex-col items-center justify-center p-8 text-center bg-black/20 relative group hover:border-primary transition-colors">
+                        <span class="material-symbols-outlined text-5xl text-slate-500 mb-4 group-hover:text-primary transition-colors">upload_file</span>
+                        <p class="font-bold mb-1">Drop CSV file here or <span class="text-primary cursor-pointer">browse</span></p>
+                        <p class="text-xs text-slate-500">Format: Question, OptA, OptB, OptC, OptD, Correct(A-D), Subject</p>
+                        <input type="file" id="csv-file" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleCSV(event)">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>`;
+}
+
+// Admin Logic
+window.pushMCQ = async () => {
+    const data = {
+        question: document.getElementById('ad-q').value,
+        optA: document.getElementById('ad-a').value,
+        optB: document.getElementById('ad-b').value,
+        optC: document.getElementById('ad-c').value,
+        optD: document.getElementById('ad-d').value,
+        correct: document.getElementById('ad-corr').value,
+        subject: document.getElementById('ad-sub').value,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if(!data.question || !data.optA) return alert("Fill required fields");
+    await db.collection('mcqs').add(data);
+    alert("MCQ Added!"); 
+    window.router('admin'); // Refresh
+};
+
+window.handleCSV = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        const rows = text.split('\n').slice(1); // Skip header
+        let count = 0;
+        const batch = db.batch(); // Use Firestore batch for bulk
+        rows.forEach(row => {
+            const cols = row.split(',').map(c => c.trim());
+            if(cols.length >= 7 && cols[0]) {
+                const ref = db.collection('mcqs').doc();
+                batch.set(ref, { question: cols[0], optA: cols[1], optB: cols[2], optC: cols[3], optD: cols[4], correct: cols[5], subject: cols[6] });
+                count++;
+            }
+        });
+        if(count > 0) {
+            await batch.commit();
+            alert(`Successfully uploaded ${count} MCQs via CSV!`);
+            window.location.reload();
+        } else alert("Invalid CSV format.");
+    };
+    reader.readAsText(file);
+};
+
+// Image 9/10: Leaderboard
+async function fetchLeaderboard() {
     try {
-        const [nSnap, mSnap] = await Promise.all([
-            db.collection("notifications").orderBy("timestamp", "desc").limit(5).get(),
-            db.collection("mcqs").get()
-        ]);
-        window.SHARK.notifications = nSnap.docs.map(d => d.data());
-        window.SHARK.mcqs = mSnap.docs.map(d => d.data());
-        window.SHARK.subjects = [...new Set(window.SHARK.mcqs.map(m => m.Subject))].filter(Boolean);
-        
-        const loader = document.getElementById("boot-loader");
-        if(loader) loader.remove();
-        window.router("home");
-    } catch(e) { 
-        console.error("BOOT CRITICAL ERR", e);
-        document.getElementById("boot-loader").innerHTML = `<p class="text-red-500 font-mono">CONNECTION FAILED: OFFLINE</p>`;
-    }
+        const snap = await db.collection('users').orderBy('xp', 'desc').limit(50).get();
+        window.SHARK.allUsers = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        window.router('leaderboard'); // Re-render with data
+    } catch(e) { console.error(e); }
 }
 
-function updateProfileUI() {
-    const user = window.SHARK.user;
-    if(user) {
-        document.getElementById('login-btn').classList.add('hidden');
-        document.getElementById('user-profile').classList.remove('hidden');
-        document.getElementById('user-initial').innerText = user.displayName ? user.displayName.charAt(0) : 'U';
-        document.getElementById('nav-xp').innerText = window.SHARK.xp + " XP";
+function viewLeaderboard() {
+    if(!window.SHARK.allUsers || window.SHARK.allUsers.length === 0) return `<div class="text-center py-20 animate-pulse text-primary">Loading Leaderboard Data...</div>`;
+
+    const list = window.SHARK.allUsers.map((u, i) => `
+        <div class="flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 transition-colors ${u.id === (window.SHARK.user?.uid) ? 'bg-primary/10 border-primary/30' : ''}">
+            <div class="flex items-center gap-6 w-1/2">
+                <span class="text-lg font-black ${i < 3 ? 'text-[#ffb703]' : 'text-slate-500'} w-6">${(i+1).toString().padStart(2,'0')} ${i<3?'<span class="material-symbols-outlined text-sm">workspace_premium</span>':''}</span>
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center font-bold text-primary">${u.name?u.name.charAt(0):'U'}</div>
+                    <span class="font-bold text-slate-200">${u.name || 'Anonymous Shark'}</span>
+                </div>
+            </div>
+            <div class="w-1/4 text-center"><span class="px-3 py-1 bg-white/5 rounded text-xs text-slate-400 font-bold border border-white/10">Lvl ${u.level || Math.floor(u.xp/1000)+1}</span></div>
+            <div class="w-1/4 text-right font-mono font-bold text-primary">${u.xp.toLocaleString()}</div>
+        </div>
+    `).join('');
+
+    return `
+    <div class="max-w-4xl mx-auto py-8 relative">
+        <div class="text-center mb-10">
+            <h1 class="text-5xl font-black tracking-tight mb-2">The Hall of Fame</h1>
+            <p class="text-primary font-bold uppercase tracking-widest text-sm">— Top 50 Apex Sharks Ranked by XP —</p>
+        </div>
         
-        if(user.email === ADMIN_EMAIL) {
-            document.getElementById('admin-link').classList.remove('hidden');
-        }
-    }
+        <div class="glass-panel rounded-3xl overflow-hidden pb-4">
+            <div class="flex text-xs font-bold text-slate-500 uppercase tracking-widest p-6 border-b border-white/5">
+                <div class="w-1/2 pl-12">Rank & Profile</div>
+                <div class="w-1/4 text-center">Level</div>
+                <div class="w-1/4 text-right">Total XP</div>
+            </div>
+            ${list}
+        </div>
+
+        ${window.SHARK.user ? `
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-4xl bg-gradient-to-r from-primary to-[#00f2fe] p-1 rounded-2xl shadow-[0_0_30px_rgba(13,242,242,0.3)] z-50">
+            <div class="bg-panel rounded-xl px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full bg-dark border-2 border-primary flex items-center justify-center font-black text-primary text-xl">${window.SHARK.user.displayName?.charAt(0) || 'U'}</div>
+                    <div>
+                        <p class="font-bold text-lg"><span class="text-slate-400 text-sm mr-2">Your Profile</span> ${window.SHARK.user.displayName}</p>
+                        <p class="text-xs text-primary">Level ${window.SHARK.userData.level} • Keep grinding to climb!</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="font-black text-2xl text-white">${window.SHARK.userData.xp.toLocaleString()} XP</p>
+                    <button onclick="window.router('vault')" class="bg-primary text-dark text-[10px] font-black uppercase px-4 py-1 rounded-full mt-1 hover:brightness-110 flex items-center gap-1">Go Practice <span class="material-symbols-outlined text-[12px]">bolt</span></button>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+    </div>`;
 }
 
-// Event Listeners
-auth.onAuthStateChanged(user => { 
-    if(user) { 
-        window.SHARK.user = user; 
-        updateProfileUI(); 
-    } 
-});
-
-document.addEventListener("DOMContentLoaded", boot);
+// Utility: Inject Dummy Data if DB is empty (For immediate visual validation)
+function populateDummyData() {
+    window.SHARK.alerts = [
+        { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" },
+        { title: "Registration for CSS 2025 has commenced.", urdu: "فیڈرل پبلک سروس کمیشن: سی ایس ایس 2025 رجسٹریشن", date: "10 Oct 2024", type: "URGENT" }
+    ];
+    window.SHARK.mcqs = [
+        { subject: "Geography", question: "Which pass connects Pakistan with Afghanistan?", optA: "Khyber Pass", optB: "Bolan Pass", optC: "Gomal Pass", optD: "Lowari Pass", correct: "A" },
+        { subject: "General Knowledge", question: "What is the speed of light in vacuum?", optA: "300,000 km/s", optB: "150,000 km/s", optC: "400,000 km/s", optD: "500,000 km/s", correct: "A" },
+        { subject: "Pakistan Affairs", question: "When did Pakistan become a Republic?", optA: "1947", optB: "1956", optC: "1962", optD: "1973", correct: "B" }
+    ];
+}
