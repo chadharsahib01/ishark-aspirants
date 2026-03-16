@@ -56,11 +56,10 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 // --- BOOTSTRAP ---
-// --- BOOTSTRAP ---
 async function initApp() {
     try {
         const [mcqSnap, alertSnap] = await Promise.all([
-            db.collection("mcqs").limit(2000).get(), // Increased limit to fetch all your uploaded MCQs
+            db.collection("mcqs").limit(2000).get(), // Fetch all uploaded MCQs
             db.collection("alerts").orderBy("date", "desc").limit(20).get()
         ]);
         
@@ -73,15 +72,6 @@ async function initApp() {
         // Merge the new database subjects with the default ones
         window.SHARK.subjects = [...new Set([...window.SHARK.subjects, ...dynamicSubjects])];
         
-        // Populate dummy data if DB is empty to show UI
-        if(window.SHARK.mcqs.length === 0) populateDummyData();
-
-        window.router('dashboard');
-    } catch(e) {
-        console.error(e);
-        document.getElementById("view-container").innerHTML = `<div class="text-red-500 p-10 text-center font-mono">CRITICAL DB LINK FAILURE</div>`;
-    }
-}
         // Populate dummy data if DB is empty to show UI
         if(window.SHARK.mcqs.length === 0) populateDummyData();
 
@@ -227,7 +217,7 @@ function viewDashboard() {
 }
 
 function viewVault() {
-    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper' };
+    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper', 'Mass Media': 'live_tv' };
     
     const cards = window.SHARK.subjects.map(s => {
         const count = window.SHARK.mcqs.filter(m => m.subject === s).length;
@@ -238,7 +228,7 @@ function viewVault() {
                 <span class="material-symbols-outlined text-primary text-2xl">${icons[s] || 'folder'}</span>
             </div>
             <h3 class="text-xl font-bold mb-2 group-hover:text-primary transition-colors">${s}</h3>
-            <p class="text-sm text-slate-400 mb-6">Master core concepts and historical data. Contains ${count} questions.</p>
+            <p class="text-sm text-slate-400 mb-6">Contains ${count} questions.</p>
         </div>`;
     }).join('');
 
@@ -254,7 +244,7 @@ function viewVault() {
 
 window.initQuiz = (subject) => {
     let pool = window.SHARK.mcqs.filter(m => m.subject === subject);
-    if(pool.length < 5) return alert("Not enough questions in this category yet.");
+    if(pool.length < 5) return alert(`Not enough questions in ${subject} yet. Needs at least 5.`);
     
     pool = pool.sort(() => 0.5 - Math.random()).slice(0, 10);
     window.SHARK.quizSession = { active: true, subject, pool, index: 0, score: 0, timeStart: Date.now(), history: [] };
@@ -475,7 +465,7 @@ function viewAlerts() {
 }
 
 // ==========================================
-// ADMIN LOGIC & VIEWS (Refactored Modularly)
+// ADMIN LOGIC & VIEWS
 // ==========================================
 
 function viewAdmin() {
