@@ -583,25 +583,57 @@ window.pushMCQ = async () => {
 window.handleCSV = (e) => {
     const file = e.target.files[0];
     if(!file) return;
+    
+    // UI Feedback
+    e.target.parentElement.innerHTML = `<div class="loader-ring mx-auto mb-4"></div><p class="text-primary font-bold">Encrypting & Syncing Data...</p>`;
+
     const reader = new FileReader();
-    reader.onload = async (e) => {
-        const text = e.target.result;
-        const rows = text.split('\n').slice(1); // Skip header
+    reader.onload = async (event) => {
+        const text = event.target.result;
+        const rows = text.split('\n').slice(1); // Skip header row
         let count = 0;
-        const batch = db.batch(); // Use Firestore batch for bulk
+        const batch = db.batch(); // Firebase Batch limits to 500 writes. We'll handle up to 499 per CSV.
+        
+        // Advanced CSV Regex: Splits by comma, but ignores commas inside double quotes
+        const csvRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+
         rows.forEach(row => {
-            const cols = row.split(',').map(c => c.trim());
+            if(!row.trim()) return; // Skip empty lines
+            
+            // Split and remove quotes from the resulting strings
+            const cols = row.split(csvRegex).map(c => c.replace(/^"|"$/g, '').trim());
+            
             if(cols.length >= 7 && cols[0]) {
                 const ref = db.collection('mcqs').doc();
-                batch.set(ref, { question: cols[0], optA: cols[1], optB: cols[2], optC: cols[3], optD: cols[4], correct: cols[5], subject: cols[6] });
+                batch.set(ref, { 
+                    question: cols[0], 
+                    optA: cols[1], 
+                    optB: cols[2], 
+                    optC: cols[3], 
+                    optD: cols[4], 
+                    correct: cols[5].toUpperCase(), // Force A, B, C, or D
+                    subject: cols[6],
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
                 count++;
             }
         });
-        if(count > 0) {
-            await batch.commit();
-            alert(`Successfully uploaded ${count} MCQs via CSV!`);
+
+        if(count > 0 && count <= 500) {
+            try {
+                await batch.commit();
+                alert(`SUCCESS: Uploaded ${count} MCQs to Vault!`);
+                window.location.reload();
+            } catch(error) {
+                alert("Sync Error: " + error.message);
+            }
+        } else if (count > 500) {
+            alert("Please limit CSV to 500 questions per upload to respect Firestore Free Tier batch limits.");
             window.location.reload();
-        } else alert("Invalid CSV format.");
+        } else {
+            alert("Format Error: Ensure your CSV has 7 columns.");
+            window.location.reload();
+        }
     };
     reader.readAsText(file);
 };
