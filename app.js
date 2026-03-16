@@ -56,15 +56,32 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 // --- BOOTSTRAP ---
+// --- BOOTSTRAP ---
 async function initApp() {
     try {
         const [mcqSnap, alertSnap] = await Promise.all([
-            db.collection("mcqs").limit(500).get(), // Limit for performance
+            db.collection("mcqs").limit(2000).get(), // Increased limit to fetch all your uploaded MCQs
             db.collection("alerts").orderBy("date", "desc").limit(20).get()
         ]);
+        
         window.SHARK.mcqs = mcqSnap.docs.map(d => ({id: d.id, ...d.data()}));
         window.SHARK.alerts = alertSnap.docs.map(d => ({id: d.id, ...d.data()}));
         
+        // NEW ENTERPRISE LOGIC: Dynamically extract unique subjects from your database
+        const dynamicSubjects = [...new Set(window.SHARK.mcqs.map(m => m.subject))].filter(Boolean);
+        
+        // Merge the new database subjects with the default ones
+        window.SHARK.subjects = [...new Set([...window.SHARK.subjects, ...dynamicSubjects])];
+        
+        // Populate dummy data if DB is empty to show UI
+        if(window.SHARK.mcqs.length === 0) populateDummyData();
+
+        window.router('dashboard');
+    } catch(e) {
+        console.error(e);
+        document.getElementById("view-container").innerHTML = `<div class="text-red-500 p-10 text-center font-mono">CRITICAL DB LINK FAILURE</div>`;
+    }
+}
         // Populate dummy data if DB is empty to show UI
         if(window.SHARK.mcqs.length === 0) populateDummyData();
 
