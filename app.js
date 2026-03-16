@@ -116,12 +116,36 @@ window.router = (view) => {
 // Image 1: Student Dashboard
 function viewDashboard() {
     const latestAlert = window.SHARK.alerts[0] || { title: "No recent updates", urdu: "کوئی تازہ ترین اپ ڈیٹ نہیں" };
-    const xp = window.SHARK.userData.xp;
     
+    // Calculate global rank dynamically (assuming 100 base + 1 per 1000 XP)
+    const rank = window.SHARK.userData.xp > 0 ? Math.max(1, 500 - Math.floor(window.SHARK.userData.xp / 100)) : 'Unranked';
+
+    // --- NEW: DYNAMIC CHART GENERATION ---
+    let chartHTML = '';
+    const activity = window.SHARK.userData.activity || {};
+    let maxDailyXP = 200; // Baseline to prevent 0 division
+    
+    // Find the highest XP day to scale the bars properly
+    Object.values(activity).forEach(val => { if(val > maxDailyXP) maxDailyXP = val; });
+    
+    // Generate bars for the last 10 days
+    for(let i=9; i>=0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toLocaleDateString('en-CA');
+        const dayXP = activity[dateStr] || 0;
+        
+        // Calculate height % (Min 5% so empty days show a small bump, Max 100%)
+        let heightPct = dayXP === 0 ? 5 : Math.max(15, Math.floor((dayXP / maxDailyXP) * 100));
+        let isActive = (i === 0 && dayXP > 0) ? 'active' : ''; // Highlight today if active
+        
+        chartHTML += `<div class="w-full rounded-t-sm stat-bar ${isActive}" style="height: ${heightPct}%" title="${dateStr}: ${dayXP} XP"></div>`;
+    }
+
     return `
     <div class="space-y-6">
         <div>
-            <h1 class="text-4xl font-black tracking-tight mb-1">Student Dashboard</h1>
+            <h1 class="text-4xl font-black tracking-tight mb-1 text-white">Student Dashboard</h1>
             <p class="text-slate-400">Welcome back, Scholar. Your path to excellence starts here.</p>
         </div>
         
@@ -132,9 +156,9 @@ function viewDashboard() {
                     <span class="text-[10px] font-bold text-primary tracking-widest uppercase mb-2 block flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span> Live Recruitment Updates
                     </span>
-                    <h2 class="text-2xl font-bold mb-4">PPSC/FPSC Alerts</h2>
+                    <h2 class="text-2xl font-bold mb-4 text-white">PPSC/FPSC Alerts</h2>
                     <p class="urdu-text text-xl text-slate-300 mb-6">${latestAlert.urdu || latestAlert.title}</p>
-                    <button onclick="window.router('alerts')" class="btn-primary px-6 py-2 rounded-lg text-sm flex items-center gap-2 w-max">
+                    <button onclick="window.router('alerts')" class="btn-primary px-6 py-2 rounded-lg text-sm flex items-center gap-2 w-max text-dark">
                         View All Alerts <span class="material-symbols-outlined text-sm">arrow_forward</span>
                     </button>
                 </div>
@@ -145,16 +169,16 @@ function viewDashboard() {
                     <div class="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center mb-4 border border-white/10">
                         <span class="material-symbols-outlined text-primary">quiz</span>
                     </div>
-                    <h2 class="text-xl font-bold mb-2">Quiz System</h2>
+                    <h2 class="text-xl font-bold mb-2 text-white">Quiz System</h2>
                     <p class="text-sm text-slate-400 mb-6">Challenge yourself with time-bound mock exams tailored for competitive testing.</p>
                 </div>
                 <div>
                     <div class="flex justify-between text-xs font-bold mb-2 uppercase tracking-wide">
-                        <span class="text-slate-500">Daily Goal</span>
-                        <span class="text-primary">75% Complete</span>
+                        <span class="text-slate-500">Practice Goal</span>
+                        <span class="text-primary">${window.SHARK.userData.quizzesTaken > 0 ? 'Active' : 'Pending'}</span>
                     </div>
-                    <div class="w-full bg-white/5 rounded-full h-1.5 mb-4"><div class="bg-primary h-1.5 rounded-full" style="width: 75%"></div></div>
-                    <button onclick="window.router('vault')" class="btn-ghost w-full py-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm">
+                    <div class="w-full bg-white/5 rounded-full h-1.5 mb-4"><div class="bg-primary h-1.5 rounded-full" style="width: ${window.SHARK.userData.quizzesTaken > 0 ? '100%' : '5%'}"></div></div>
+                    <button onclick="window.router('vault')" class="btn-ghost w-full py-3 rounded-lg flex items-center justify-center gap-2 font-bold text-sm text-white">
                         <span class="material-symbols-outlined text-lg">play_arrow</span> Start Quiz
                     </button>
                 </div>
@@ -164,36 +188,32 @@ function viewDashboard() {
         <div class="glass-panel rounded-2xl p-8">
             <div class="flex justify-between items-start mb-8">
                 <div>
-                    <h2 class="text-xl font-bold">Study Progress</h2>
+                    <h2 class="text-xl font-bold text-white">Study Progress</h2>
                     <p class="text-sm text-slate-400">Visualizing your academic journey this month.</p>
-                </div>
-                <div class="bg-white/5 rounded-full p-1 flex text-xs font-bold">
-                    <button class="px-4 py-1.5 rounded-full bg-primary/20 text-primary">WEEKLY</button>
-                    <button class="px-4 py-1.5 rounded-full text-slate-400">MONTHLY</button>
                 </div>
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
-                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Hours Studied</p>
-                    <p class="text-3xl font-black">${window.SHARK.userData.hours || '12.5'}</p>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Total XP</p>
+                    <p class="text-3xl font-black text-white">${window.SHARK.userData.xp.toLocaleString()}</p>
                 </div>
                 <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Quizzes Taken</p>
-                    <p class="text-3xl font-black">${window.SHARK.userData.quizzesTaken || 0}</p>
+                    <p class="text-3xl font-black text-white">${window.SHARK.userData.quizzesTaken || 0}</p>
                 </div>
                 <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
-                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Avg. Score</p>
-                    <p class="text-3xl font-black">88%</p>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Current Level</p>
+                    <p class="text-3xl font-black text-white">${window.SHARK.userData.level || Math.floor(window.SHARK.userData.xp/1000)+1}</p>
                 </div>
                 <div class="bg-white/5 rounded-xl p-6 text-center border border-white/5">
                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Global Rank</p>
-                    <p class="text-3xl font-black">#142</p>
+                    <p class="text-3xl font-black text-primary">#${rank}</p>
                 </div>
             </div>
 
             <div class="h-24 flex items-end gap-2 px-2 bg-gradient-to-t from-primary/5 to-transparent rounded-lg pt-4">
-                ${[30,40,25,35,80,50,40,45,60,30].map(h => `<div class="w-full rounded-t-sm stat-bar ${h===80?'active':''}" style="height: ${h}%"></div>`).join('')}
+                ${chartHTML}
             </div>
         </div>
     </div>`;
@@ -336,9 +356,19 @@ function finalizeQuiz() {
     if(window.SHARK.user) {
         window.SHARK.userData.xp += xpEarned;
         window.SHARK.userData.quizzesTaken = (window.SHARK.userData.quizzesTaken || 0) + 1;
+        
+        // NEW: Daily Activity Tracking Architecture
+        // Get today's date in YYYY-MM-DD format based on local time
+        const today = new Date().toLocaleDateString('en-CA'); 
+        
+        if (!window.SHARK.userData.activity) window.SHARK.userData.activity = {};
+        window.SHARK.userData.activity[today] = (window.SHARK.userData.activity[today] || 0) + xpEarned;
+
+        // Sync to Firestore using atomic increments for safety
         db.collection('users').doc(window.SHARK.user.uid).update({
             xp: firebase.firestore.FieldValue.increment(xpEarned),
-            quizzesTaken: firebase.firestore.FieldValue.increment(1)
+            quizzesTaken: firebase.firestore.FieldValue.increment(1),
+            [`activity.${today}`]: firebase.firestore.FieldValue.increment(xpEarned)
         });
     }
 
