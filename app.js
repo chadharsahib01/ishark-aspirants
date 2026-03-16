@@ -31,11 +31,10 @@ window.SHARK = {
 // --- ENTERPRISE TOAST SYSTEM ---
 window.showToast = (msg, type = 'success') => {
     const container = document.getElementById('toast-container');
-    if (!container) return; // Failsafe in case HTML hasn't loaded yet
+    if (!container) return; 
 
     const toast = document.createElement('div');
     
-    // Dynamic styling based on success vs error
     const border = type === 'error' ? 'border-rose-500 text-rose-500' : 'border-primary text-primary';
     const icon = type === 'error' ? 'error' : 'check_circle';
     const bg = type === 'error' ? 'bg-rose-500/10' : 'bg-primary/10';
@@ -48,13 +47,11 @@ window.showToast = (msg, type = 'success') => {
     
     container.appendChild(toast);
     
-    // Animate In
     requestAnimationFrame(() => {
         toast.style.transform = 'translateY(0)';
         toast.style.opacity = '1';
     });
 
-    // Auto-remove after 3.5 seconds
     setTimeout(() => {
         toast.style.transform = 'translateY(20px)';
         toast.style.opacity = '0';
@@ -62,7 +59,6 @@ window.showToast = (msg, type = 'success') => {
     }, 3500);
 };
 
-// Replace ALL standard alerts system-wide (Defaults to error style for native catches)
 window.alert = (msg) => window.showToast(msg, 'error');
 
 
@@ -77,7 +73,6 @@ window.logout = () => auth.signOut().then(() => window.location.reload());
 auth.onAuthStateChanged(async (user) => {
     if (user) {
         window.SHARK.user = user;
-        // Sync user doc
         const userRef = db.collection('users').doc(user.uid);
         const doc = await userRef.get();
         if(!doc.exists) {
@@ -89,7 +84,7 @@ auth.onAuthStateChanged(async (user) => {
         if(document.getElementById('view-container').innerHTML.includes('autorenew')) initApp();
     } else {
         window.SHARK.user = null;
-        initApp(); // Boot as guest
+        initApp(); 
     }
 });
 
@@ -104,13 +99,9 @@ async function initApp() {
         window.SHARK.mcqs = mcqSnap.docs.map(d => ({id: d.id, ...d.data()}));
         window.SHARK.alerts = alertSnap.docs.map(d => ({id: d.id, ...d.data()}));
         
-        // NEW ENTERPRISE LOGIC: Dynamically extract unique subjects from your database
         const dynamicSubjects = [...new Set(window.SHARK.mcqs.map(m => m.subject))].filter(Boolean);
-        
-        // Merge the new database subjects with the default ones
         window.SHARK.subjects = [...new Set([...window.SHARK.subjects, ...dynamicSubjects])];
         
-        // Populate dummy data if DB is empty to show UI
         if(window.SHARK.mcqs.length === 0) populateDummyData();
 
         window.router('dashboard');
@@ -519,6 +510,9 @@ function viewAdmin() {
                 <h2 class="font-black text-xl uppercase tracking-tighter">Command</h2>
             </div>
             <button onclick="document.getElementById('admin-content').innerHTML = window.getAdminDash()" class="text-left px-4 py-3 rounded-lg hover:bg-white/5 text-slate-400 focus:bg-primary/10 focus:text-primary font-bold flex gap-3"><span class="material-symbols-outlined">dashboard</span> Dashboard</button>
+            
+            <button onclick="document.getElementById('admin-content').innerHTML = window.getAdminMCQs()" class="text-left px-4 py-3 rounded-lg hover:bg-white/5 text-slate-400 focus:bg-primary/10 focus:text-primary font-bold flex gap-3"><span class="material-symbols-outlined">database</span> Database Engine</button>
+            
             <button onclick="document.getElementById('admin-content').innerHTML = window.getAdminUsers()" class="text-left px-4 py-3 rounded-lg hover:bg-white/5 text-slate-400 focus:bg-primary/10 focus:text-primary font-bold flex gap-3"><span class="material-symbols-outlined">group</span> Users</button>
             <div class="mt-auto pt-8">
                 <button onclick="window.router('dashboard')" class="text-left w-full px-4 py-3 rounded-lg text-rose-400 hover:bg-rose-500/10 font-bold flex gap-3"><span class="material-symbols-outlined">logout</span> Exit Admin</button>
@@ -636,6 +630,198 @@ window.getAdminUsers = () => {
         </div>
     </div>`;
 };
+
+// --- NEW: MCQ MANAGEMENT UI ---
+window.getAdminMCQs = () => {
+    setTimeout(() => window.renderMCQTable(), 0);
+
+    return `
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+        
+        <div class="lg:col-span-2 glass-panel rounded-2xl flex flex-col h-[80vh]">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center">
+                <h3 class="text-xl font-bold flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary">database</span> Data Viewer</h3>
+                <div class="relative">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                    <input type="text" id="mcq-search" onkeyup="window.renderMCQTable(this.value)" placeholder="Search questions..." class="bg-black/50 border border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm outline-none focus:border-primary text-white w-64 transition-all focus:w-80">
+                </div>
+            </div>
+            <div class="overflow-y-auto flex-grow p-0 relative">
+                <table class="w-full text-left border-collapse">
+                    <thead class="sticky top-0 bg-panel border-b border-white/5 z-10 shadow-lg">
+                        <tr class="text-[10px] text-slate-500 uppercase tracking-widest">
+                            <th class="py-3 px-6 font-bold w-1/2">Question</th>
+                            <th class="py-3 px-4 font-bold">Subject</th>
+                            <th class="py-3 px-6 font-bold text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mcq-table-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6 rounded-2xl flex flex-col h-max sticky top-32">
+            <h3 id="mcq-form-title" class="text-xl font-bold mb-6 flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary" id="form-icon">add_box</span> <span id="form-title-text">Add New MCQ</span></h3>
+            
+            <input type="hidden" id="single-id" value="">
+            
+            <div class="space-y-4 flex-grow">
+                <textarea id="single-q" placeholder="Type the question here..." class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-24 outline-none focus:border-primary text-white transition-colors"></textarea>
+                
+                <input id="single-a" placeholder="Option A" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                <input id="single-b" placeholder="Option B" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                <input id="single-c" placeholder="Option C" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                <input id="single-d" placeholder="Option D" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <select id="single-corr" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                        <option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option>
+                    </select>
+                    
+                    <input id="single-sub" placeholder="Subject" list="subject-list" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+                    <datalist id="subject-list">
+                        ${window.SHARK.subjects.map(s => `<option value="${s}">`).join('')}
+                    </datalist>
+                </div>
+                
+                <div class="pt-4">
+                    <button id="save-mcq-btn" onclick="window.saveSingleMCQ()" class="btn-primary w-full py-4 rounded-lg text-sm font-bold uppercase tracking-widest flex justify-center items-center gap-2 transition-all">
+                        <span class="material-symbols-outlined text-lg hidden" id="save-mcq-spinner">sync</span>
+                        <span id="save-mcq-text">Save to Database</span>
+                    </button>
+                    <button onclick="window.resetMCQForm()" class="w-full py-3 mt-2 text-xs font-bold tracking-widest uppercase text-slate-500 hover:text-white transition-colors">Clear Form</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+};
+
+// --- DATABASE ENGINE LOGIC (CRUD) ---
+window.renderMCQTable = (filterTerm = '') => {
+    const tbody = document.getElementById('mcq-table-body');
+    if(!tbody) return;
+
+    const term = filterTerm.toLowerCase();
+    
+    const filtered = window.SHARK.mcqs.filter(m => 
+        m.question.toLowerCase().includes(term) || 
+        m.subject.toLowerCase().includes(term)
+    ).slice(0, 50);
+
+    if(filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="p-10 text-center text-slate-500 italic">No questions found.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(m => `
+        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors group">
+            <td class="py-4 px-6 text-sm font-medium text-slate-200 line-clamp-2">${m.question}</td>
+            <td class="py-4 px-4 text-xs font-bold text-primary tracking-wider uppercase">${m.subject}</td>
+            <td class="py-4 px-6 text-right space-x-2 opacity-20 group-hover:opacity-100 transition-opacity">
+                <button onclick="window.editMCQ('${m.id}')" class="p-2 rounded-lg bg-white/5 hover:bg-primary/20 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                <button onclick="window.deleteMCQ('${m.id}')" class="p-2 rounded-lg bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-500 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+            </td>
+        </tr>
+    `).join('');
+};
+
+window.saveSingleMCQ = async () => {
+    const id = document.getElementById('single-id').value;
+    const q = document.getElementById('single-q').value.trim();
+    const a = document.getElementById('single-a').value.trim();
+    const b = document.getElementById('single-b').value.trim();
+    const c = document.getElementById('single-c').value.trim();
+    const d = document.getElementById('single-d').value.trim();
+    const corr = document.getElementById('single-corr').value;
+    const sub = document.getElementById('single-sub').value.trim();
+
+    if(!q || !a || !b || !c || !d || !sub) return window.showToast("Error: All fields are required.", "error");
+
+    const btn = document.getElementById('save-mcq-btn');
+    const text = document.getElementById('save-mcq-text');
+    const spinner = document.getElementById('save-mcq-spinner');
+
+    btn.disabled = true;
+    text.innerText = "Syncing...";
+    spinner.classList.remove('hidden');
+    spinner.classList.add('animate-spin');
+
+    const payload = { question: q, optA: a, optB: b, optC: c, optD: d, correct: corr, subject: sub };
+
+    try {
+        if(id) {
+            await db.collection('mcqs').doc(id).update(payload);
+            const index = window.SHARK.mcqs.findIndex(m => m.id === id);
+            if(index !== -1) window.SHARK.mcqs[index] = { id, ...payload };
+            window.showToast("MCQ Updated Successfully!");
+        } else {
+            payload.timestamp = firebase.firestore.FieldValue.serverTimestamp();
+            const docRef = await db.collection('mcqs').add(payload);
+            window.SHARK.mcqs.unshift({ id: docRef.id, ...payload }); 
+            window.showToast("New MCQ Added to Database!");
+        }
+        
+        window.resetMCQForm();
+        window.renderMCQTable(document.getElementById('mcq-search').value); 
+        
+    } catch(e) {
+        window.showToast("Database Error: " + e.message, "error");
+    } finally {
+        btn.disabled = false;
+        text.innerText = "Save to Database";
+        spinner.classList.add('hidden');
+        spinner.classList.remove('animate-spin');
+    }
+};
+
+window.editMCQ = (id) => {
+    const mcq = window.SHARK.mcqs.find(m => m.id === id);
+    if(!mcq) return;
+
+    document.getElementById('single-id').value = mcq.id;
+    document.getElementById('single-q').value = mcq.question;
+    document.getElementById('single-a').value = mcq.optA;
+    document.getElementById('single-b').value = mcq.optB;
+    document.getElementById('single-c').value = mcq.optC;
+    document.getElementById('single-d').value = mcq.optD;
+    document.getElementById('single-corr').value = mcq.correct;
+    document.getElementById('single-sub').value = mcq.subject;
+
+    document.getElementById('form-icon').innerText = 'edit';
+    document.getElementById('form-title-text').innerText = 'Edit Database Entry';
+    document.getElementById('save-mcq-text').innerText = 'Update Record';
+    
+    document.getElementById('mcq-form-title').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.deleteMCQ = async (id) => {
+    if(!confirm("CRITICAL WARNING: This will permanently delete this question from the global database. Proceed?")) return;
+
+    try {
+        await db.collection('mcqs').doc(id).delete();
+        window.SHARK.mcqs = window.SHARK.mcqs.filter(m => m.id !== id);
+        window.renderMCQTable(document.getElementById('mcq-search').value);
+        window.showToast("Question Eradicated from Database.", "success");
+    } catch(e) {
+        window.showToast("Delete Failed: " + e.message, "error");
+    }
+};
+
+window.resetMCQForm = () => {
+    document.getElementById('single-id').value = '';
+    document.getElementById('single-q').value = '';
+    document.getElementById('single-a').value = '';
+    document.getElementById('single-b').value = '';
+    document.getElementById('single-c').value = '';
+    document.getElementById('single-d').value = '';
+    document.getElementById('single-sub').value = '';
+    
+    document.getElementById('form-icon').innerText = 'add_box';
+    document.getElementById('form-title-text').innerText = 'Add New MCQ';
+    document.getElementById('save-mcq-text').innerText = 'Save to Database';
+};
+
 
 window.publishAlert = async () => {
     const title = document.getElementById('alert-title').value.trim();
