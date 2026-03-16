@@ -24,7 +24,7 @@
 </head>
 <body class="bg-dark text-slate-200 antialiased selection:bg-primary/30">
 
-    <nav class="fixed top-0 w-full z-50 bg-dark/90 backdrop-blur-md border-b border-white/5 px-6 py-4">
+ <nav id="top-nav" class="fixed top-0 w-full z-50 bg-dark/90 backdrop-blur-md border-b border-white/5 px-6 py-4 transition-transform duration-300">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3 cursor-pointer" onclick="window.router('dashboard')">
                 <span class="text-primary material-symbols-outlined text-3xl">tsunami</span>
@@ -32,13 +32,13 @@
             </div>
             
             <div id="nav-links" class="hidden md:flex gap-6 text-sm font-bold text-slate-400">
-                <button onclick="window.router('vault')" class="hover:text-primary transition-colors">Vault</button>
-                <button onclick="window.router('alerts')" class="hover:text-primary transition-colors">Alerts</button>
-                <button onclick="window.router('leaderboard')" class="hover:text-primary transition-colors">Leaderboard</button>
+                <button onclick="window.router('vault')" class="nav-link hover:text-primary transition-colors" data-route="vault">Vault</button>
+                <button onclick="window.router('alerts')" class="nav-link hover:text-primary transition-colors" data-route="alerts">Alerts</button>
+                <button onclick="window.router('leaderboard')" class="nav-link hover:text-primary transition-colors" data-route="leaderboard">Leaderboard</button>
             </div>
 
             <div id="auth-layer" class="flex items-center gap-4">
-                <button id="login-btn" onclick="window.login()" class="btn-primary px-4 py-2 rounded-lg text-sm">LOGIN / SYNC</button>
+                <button id="login-btn" onclick="window.login()" class="btn-primary px-4 py-2 rounded-lg text-sm">LOGIN</button>
                 <div id="user-profile" class="hidden flex items-center gap-4">
                     <div class="text-right hidden sm:block">
                         <p class="text-[10px] text-primary font-bold tracking-widest uppercase">Experience</p>
@@ -58,15 +58,46 @@
         </div>
     </nav>
 
-    <main id="view-container" class="pt-28 pb-20 px-4 sm:px-6 max-w-7xl mx-auto min-h-screen">
-        <div class="flex items-center justify-center h-[60vh] animate-pulse">
-            <span class="text-primary material-symbols-outlined text-6xl animate-spin">autorenew</span>
+    <main id="view-container" class="pt-28 pb-24 px-4 sm:px-6 max-w-7xl mx-auto min-h-screen">
+        <div class="space-y-6 w-full max-w-5xl mx-auto">
+            <div>
+                <div class="skeleton-box h-10 w-1/3 mb-3 rounded-lg"></div>
+                <div class="skeleton-box h-4 w-1/2 rounded"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="md:col-span-2 skeleton-box h-48 rounded-2xl"></div>
+                <div class="skeleton-box h-48 rounded-2xl"></div>
+            </div>
+            <div class="skeleton-box h-40 rounded-2xl"></div>
         </div>
     </main>
+
+    <div id="mobile-nav" class="md:hidden fixed bottom-0 left-0 w-full bg-dark/95 backdrop-blur-lg border-t border-white/10 flex justify-around items-center px-2 py-3 z-50 pb-safe transition-transform duration-300">
+        <button onclick="window.router('dashboard')" class="mobile-nav-link flex flex-col items-center gap-1 text-slate-500" data-route="dashboard">
+            <span class="material-symbols-outlined text-2xl">dashboard</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Base</span>
+        </button>
+        <button onclick="window.router('vault')" class="mobile-nav-link flex flex-col items-center gap-1 text-slate-500" data-route="vault">
+            <span class="material-symbols-outlined text-2xl">folder_open</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Vault</span>
+        </button>
+        <button onclick="window.router('alerts')" class="mobile-nav-link flex flex-col items-center gap-1 text-slate-500" data-route="alerts">
+            <span class="material-symbols-outlined text-2xl">notifications</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Alerts</span>
+        </button>
+        <button onclick="window.router('leaderboard')" class="mobile-nav-link flex flex-col items-center gap-1 text-slate-500" data-route="leaderboard">
+            <span class="material-symbols-outlined text-2xl">trophy</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Ranks</span>
+        </button>
+    </div>
+
+    <div id="toast-container"></div>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="app.js"></script>
+
 </body>
 </html>
+

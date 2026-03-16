@@ -28,10 +28,48 @@ window.SHARK = {
     quizSession: { active: false, subject: '', pool: [], index: 0, score: 0, timeStart: null, history: [] }
 };
 
+// --- ENTERPRISE TOAST SYSTEM ---
+window.showToast = (msg, type = 'success') => {
+    const container = document.getElementById('toast-container');
+    if (!container) return; // Failsafe in case HTML hasn't loaded yet
+
+    const toast = document.createElement('div');
+    
+    // Dynamic styling based on success vs error
+    const border = type === 'error' ? 'border-rose-500 text-rose-500' : 'border-primary text-primary';
+    const icon = type === 'error' ? 'error' : 'check_circle';
+    const bg = type === 'error' ? 'bg-rose-500/10' : 'bg-primary/10';
+
+    toast.className = `toast-message glass-panel p-4 rounded-xl border-l-4 ${border} ${bg} flex items-center gap-3 shadow-lg w-max max-w-xs transform translate-y-10 opacity-0`;
+    toast.innerHTML = `
+        <span class="material-symbols-outlined">${icon}</span>
+        <p class="font-bold text-sm text-white">${msg}</p>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Animate In
+    requestAnimationFrame(() => {
+        toast.style.transform = 'translateY(0)';
+        toast.style.opacity = '1';
+    });
+
+    // Auto-remove after 3.5 seconds
+    setTimeout(() => {
+        toast.style.transform = 'translateY(20px)';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+};
+
+// Replace ALL standard alerts system-wide (Defaults to error style for native catches)
+window.alert = (msg) => window.showToast(msg, 'error');
+
+
 // --- AUTHENTICATION ---
 window.login = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(e => alert("Login Failed: " + e.message));
+    auth.signInWithPopup(provider).catch(e => window.showToast("Login Failed: " + e.message, 'error'));
 };
 
 window.logout = () => auth.signOut().then(() => window.location.reload());
@@ -59,7 +97,7 @@ auth.onAuthStateChanged(async (user) => {
 async function initApp() {
     try {
         const [mcqSnap, alertSnap] = await Promise.all([
-            db.collection("mcqs").limit(2000).get(), // Fetch all uploaded MCQs
+            db.collection("mcqs").limit(2000).get(), 
             db.collection("alerts").orderBy("date", "desc").limit(20).get()
         ]);
         
@@ -217,7 +255,7 @@ function viewDashboard() {
 }
 
 function viewVault() {
-    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper', 'Mass Media': 'live_tv' };
+    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper' };
     
     const cards = window.SHARK.subjects.map(s => {
         const count = window.SHARK.mcqs.filter(m => m.subject === s).length;
@@ -244,7 +282,7 @@ function viewVault() {
 
 window.initQuiz = (subject) => {
     let pool = window.SHARK.mcqs.filter(m => m.subject === subject);
-    if(pool.length < 5) return alert(`Not enough questions in ${subject} yet. Needs at least 5.`);
+    if(pool.length < 5) return window.showToast(`Not enough questions in ${subject} yet. Needs at least 5.`, 'error');
     
     pool = pool.sort(() => 0.5 - Math.random()).slice(0, 10);
     window.SHARK.quizSession = { active: true, subject, pool, index: 0, score: 0, timeStart: Date.now(), history: [] };
@@ -642,6 +680,7 @@ window.publishAlert = async () => {
         document.getElementById('alert-title').value = '';
         document.getElementById('alert-urdu').value = '';
         
+        window.showToast("Alert Broadcasted Successfully!", 'success');
         setTimeout(() => { window.location.reload(); }, 1500);
     } catch(e) {
         btn.disabled = false;
@@ -690,18 +729,18 @@ window.handleCSV = (e) => {
         if(count > 0 && count <= 500) {
             try {
                 await batch.commit();
-                alert(`SUCCESS: Uploaded ${count} MCQs to Vault!`);
-                window.location.reload();
+                window.showToast(`SUCCESS: Uploaded ${count} MCQs to Vault!`, 'success');
+                setTimeout(() => window.location.reload(), 1500);
             } catch(error) {
-                alert("Sync Error: " + error.message);
-                window.location.reload();
+                window.showToast("Sync Error: " + error.message, 'error');
+                setTimeout(() => window.location.reload(), 1500);
             }
         } else if (count > 500) {
-            alert("Please limit your CSV file to 500 questions per upload to respect Firestore Free Tier batch limits.");
-            window.location.reload();
+            window.showToast("Please limit your CSV file to 500 questions per upload to respect Firestore Free Tier batch limits.", 'error');
+            setTimeout(() => window.location.reload(), 1500);
         } else {
-            alert("Format Error: No valid questions found. Ensure your CSV has 7 columns.");
-            window.location.reload();
+            window.showToast("Format Error: No valid questions found. Ensure your CSV has 7 columns.", 'error');
+            setTimeout(() => window.location.reload(), 1500);
         }
     };
     reader.readAsText(file);
