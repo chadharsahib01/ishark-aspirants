@@ -246,7 +246,7 @@ function viewDashboard() {
 }
 
 function viewVault() {
-    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper' };
+    const icons = { 'General Knowledge':'public', 'Pakistan Affairs':'account_balance', 'Islamiyat':'menu_book', 'Everyday Science':'science', 'English':'translate', 'Current Affairs':'newspaper', 'Mass Media': 'live_tv' };
     
     const cards = window.SHARK.subjects.map(s => {
         const count = window.SHARK.mcqs.filter(m => m.subject === s).length;
@@ -446,13 +446,43 @@ function viewAnalysis() {
             </div>
         </div>
         <div class="space-y-4">${reviewCards}</div>
-        <div class="flex gap-4 mt-8">
-            <button onclick="window.router('dashboard')" class="btn-primary w-full py-4 rounded-xl text-lg flex justify-center items-center gap-2">
+        
+        <div class="flex flex-col sm:flex-row gap-4 mt-8">
+            <button onclick="window.initQuiz('${qs.subject}')" class="btn-ghost flex-1 py-4 rounded-xl text-lg flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined">refresh</span> Practice Again
+            </button>
+            
+            <button onclick="window.shareResult()" class="btn-primary flex-1 py-4 rounded-xl text-lg flex justify-center items-center gap-2">
+                <span class="material-symbols-outlined">share</span> Share Achievement
+            </button>
+        </div>
+        <div class="flex gap-4 mt-4">
+            <button onclick="window.router('dashboard')" class="bg-white/5 border border-white/10 w-full py-4 rounded-xl text-lg flex justify-center items-center gap-2 hover:bg-white/10 transition-all">
                 <span class="material-symbols-outlined">dashboard</span> Back to Dashboard
             </button>
         </div>
     </div>`;
 }
+
+// --- SOCIAL SHARING LOGIC ---
+window.shareResult = () => {
+    const qs = window.SHARK.quizSession;
+    const percent = Math.round((qs.score / qs.pool.length) * 100);
+    const appUrl = "https://ishark-aspirants.vercel.app";
+    
+    const shareText = `🔥 I just scored ${qs.score}/${qs.pool.length} (${percent}%) in "${qs.subject}" on I-SHARK! \n\n🚀 Can you beat my score? Challenge yourself here: \n${appUrl}`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: 'My I-SHARK Achievement',
+            text: shareText,
+            url: appUrl,
+        }).catch(console.error);
+    } else {
+        const encodedText = encodeURIComponent(shareText);
+        window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    }
+};
 
 function viewAlerts() {
     const alertHtml = window.SHARK.alerts.map(a => `
@@ -631,13 +661,12 @@ window.getAdminUsers = () => {
     </div>`;
 };
 
-// --- NEW: MCQ MANAGEMENT UI ---
+// --- MCQ MANAGEMENT UI ---
 window.getAdminMCQs = () => {
     setTimeout(() => window.renderMCQTable(), 0);
 
     return `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-        
         <div class="lg:col-span-2 glass-panel rounded-2xl flex flex-col h-[80vh]">
             <div class="p-6 border-b border-white/5 flex justify-between items-center">
                 <h3 class="text-xl font-bold flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary">database</span> Data Viewer</h3>
@@ -663,28 +692,22 @@ window.getAdminMCQs = () => {
 
         <div class="glass-panel p-6 rounded-2xl flex flex-col h-max sticky top-32">
             <h3 id="mcq-form-title" class="text-xl font-bold mb-6 flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary" id="form-icon">add_box</span> <span id="form-title-text">Add New MCQ</span></h3>
-            
             <input type="hidden" id="single-id" value="">
-            
             <div class="space-y-4 flex-grow">
                 <textarea id="single-q" placeholder="Type the question here..." class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-24 outline-none focus:border-primary text-white transition-colors"></textarea>
-                
                 <input id="single-a" placeholder="Option A" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                 <input id="single-b" placeholder="Option B" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                 <input id="single-c" placeholder="Option C" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                 <input id="single-d" placeholder="Option D" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
-                
                 <div class="grid grid-cols-2 gap-3 pt-2">
                     <select id="single-corr" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                         <option value="A">Correct: A</option><option value="B">Correct: B</option><option value="C">Correct: C</option><option value="D">Correct: D</option>
                     </select>
-                    
                     <input id="single-sub" placeholder="Subject" list="subject-list" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                     <datalist id="subject-list">
                         ${window.SHARK.subjects.map(s => `<option value="${s}">`).join('')}
                     </datalist>
                 </div>
-                
                 <div class="pt-4">
                     <button id="save-mcq-btn" onclick="window.saveSingleMCQ()" class="btn-primary w-full py-4 rounded-lg text-sm font-bold uppercase tracking-widest flex justify-center items-center gap-2 transition-all">
                         <span class="material-symbols-outlined text-lg hidden" id="save-mcq-spinner">sync</span>
@@ -701,19 +724,15 @@ window.getAdminMCQs = () => {
 window.renderMCQTable = (filterTerm = '') => {
     const tbody = document.getElementById('mcq-table-body');
     if(!tbody) return;
-
     const term = filterTerm.toLowerCase();
-    
     const filtered = window.SHARK.mcqs.filter(m => 
         m.question.toLowerCase().includes(term) || 
         m.subject.toLowerCase().includes(term)
     ).slice(0, 50);
-
     if(filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="3" class="p-10 text-center text-slate-500 italic">No questions found.</td></tr>`;
         return;
     }
-
     tbody.innerHTML = filtered.map(m => `
         <tr class="border-b border-white/5 hover:bg-white/5 transition-colors group">
             <td class="py-4 px-6 text-sm font-medium text-slate-200 line-clamp-2">${m.question}</td>
@@ -735,20 +754,15 @@ window.saveSingleMCQ = async () => {
     const d = document.getElementById('single-d').value.trim();
     const corr = document.getElementById('single-corr').value;
     const sub = document.getElementById('single-sub').value.trim();
-
     if(!q || !a || !b || !c || !d || !sub) return window.showToast("Error: All fields are required.", "error");
-
     const btn = document.getElementById('save-mcq-btn');
     const text = document.getElementById('save-mcq-text');
     const spinner = document.getElementById('save-mcq-spinner');
-
     btn.disabled = true;
     text.innerText = "Syncing...";
     spinner.classList.remove('hidden');
     spinner.classList.add('animate-spin');
-
     const payload = { question: q, optA: a, optB: b, optC: c, optD: d, correct: corr, subject: sub };
-
     try {
         if(id) {
             await db.collection('mcqs').doc(id).update(payload);
@@ -761,10 +775,8 @@ window.saveSingleMCQ = async () => {
             window.SHARK.mcqs.unshift({ id: docRef.id, ...payload }); 
             window.showToast("New MCQ Added to Database!");
         }
-        
         window.resetMCQForm();
         window.renderMCQTable(document.getElementById('mcq-search').value); 
-        
     } catch(e) {
         window.showToast("Database Error: " + e.message, "error");
     } finally {
@@ -778,7 +790,6 @@ window.saveSingleMCQ = async () => {
 window.editMCQ = (id) => {
     const mcq = window.SHARK.mcqs.find(m => m.id === id);
     if(!mcq) return;
-
     document.getElementById('single-id').value = mcq.id;
     document.getElementById('single-q').value = mcq.question;
     document.getElementById('single-a').value = mcq.optA;
@@ -787,17 +798,14 @@ window.editMCQ = (id) => {
     document.getElementById('single-d').value = mcq.optD;
     document.getElementById('single-corr').value = mcq.correct;
     document.getElementById('single-sub').value = mcq.subject;
-
     document.getElementById('form-icon').innerText = 'edit';
     document.getElementById('form-title-text').innerText = 'Edit Database Entry';
     document.getElementById('save-mcq-text').innerText = 'Update Record';
-    
     document.getElementById('mcq-form-title').scrollIntoView({ behavior: 'smooth' });
 };
 
 window.deleteMCQ = async (id) => {
     if(!confirm("CRITICAL WARNING: This will permanently delete this question from the global database. Proceed?")) return;
-
     try {
         await db.collection('mcqs').doc(id).delete();
         window.SHARK.mcqs = window.SHARK.mcqs.filter(m => m.id !== id);
@@ -816,12 +824,10 @@ window.resetMCQForm = () => {
     document.getElementById('single-c').value = '';
     document.getElementById('single-d').value = '';
     document.getElementById('single-sub').value = '';
-    
     document.getElementById('form-icon').innerText = 'add_box';
     document.getElementById('form-title-text').innerText = 'Add New MCQ';
     document.getElementById('save-mcq-text').innerText = 'Save to Database';
 };
-
 
 window.publishAlert = async () => {
     const title = document.getElementById('alert-title').value.trim();
@@ -831,30 +837,19 @@ window.publishAlert = async () => {
     const btnText = document.getElementById('publish-btn-text');
     const spinner = document.getElementById('publish-spinner');
     const statusMsg = document.getElementById('alert-status');
-    
     if(!title || !urdu) {
         statusMsg.innerText = "Error: Please fill in both English and Urdu details.";
         statusMsg.className = "text-xs font-bold mb-2 text-rose-500 text-center animate-fade-in block";
         return;
     }
-
     btn.disabled = true;
     btnText.innerText = "Broadcasting...";
     spinner.classList.add('animate-spin');
     spinner.classList.remove('hidden');
     statusMsg.classList.add('hidden'); 
-
     const dateOpts = { day: 'numeric', month: 'short', year: 'numeric' };
     const formattedDate = new Date().toLocaleDateString('en-GB', dateOpts);
-
-    const data = {
-        title: title,
-        urdu: urdu,
-        type: type,
-        date: formattedDate,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp() 
-    };
-
+    const data = { title: title, urdu: urdu, type: type, date: formattedDate, timestamp: firebase.firestore.FieldValue.serverTimestamp() };
     try {
         await db.collection('alerts').add(data);
         btn.classList.replace('btn-primary', 'bg-emerald-500');
@@ -862,10 +857,8 @@ window.publishAlert = async () => {
         spinner.classList.remove('animate-spin');
         spinner.innerText = 'check_circle';
         btnText.innerText = "Broadcast Successful!";
-        
         document.getElementById('alert-title').value = '';
         document.getElementById('alert-urdu').value = '';
-        
         window.showToast("Alert Broadcasted Successfully!", 'success');
         setTimeout(() => { window.location.reload(); }, 1500);
     } catch(e) {
@@ -881,9 +874,7 @@ window.publishAlert = async () => {
 window.handleCSV = (e) => {
     const file = e.target.files[0];
     if(!file) return;
-    
     e.target.parentElement.innerHTML = `<div class="loader-ring mx-auto mb-4"></div><p class="text-primary font-bold">Encrypting & Syncing Data...</p>`;
-
     const reader = new FileReader();
     reader.onload = async (event) => {
         const text = event.target.result;
@@ -891,27 +882,15 @@ window.handleCSV = (e) => {
         let count = 0;
         const batch = db.batch(); 
         const csvRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-
         rows.forEach(row => {
             if(!row.trim()) return; 
             const cols = row.split(csvRegex).map(c => c.replace(/^"|"$/g, '').trim());
-            
             if(cols.length >= 7 && cols[0]) {
                 const ref = db.collection('mcqs').doc();
-                batch.set(ref, { 
-                    question: cols[0], 
-                    optA: cols[1], 
-                    optB: cols[2], 
-                    optC: cols[3], 
-                    optD: cols[4], 
-                    correct: cols[5].toUpperCase(), 
-                    subject: cols[6],
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                batch.set(ref, { question: cols[0], optA: cols[1], optB: cols[2], optC: cols[3], optD: cols[4], correct: cols[5].toUpperCase(), subject: cols[6], timestamp: firebase.firestore.FieldValue.serverTimestamp() });
                 count++;
             }
         });
-
         if(count > 0 && count <= 500) {
             try {
                 await batch.commit();
@@ -946,7 +925,6 @@ async function fetchLeaderboard() {
 
 function viewLeaderboard() {
     if(!window.SHARK.allUsers || window.SHARK.allUsers.length === 0) return `<div class="text-center py-20 animate-pulse text-primary">Loading Leaderboard Data...</div>`;
-
     const list = window.SHARK.allUsers.map((u, i) => `
         <div class="flex items-center justify-between p-4 border-b border-white/5 hover:bg-white/5 transition-colors ${u.id === (window.SHARK.user?.uid) ? 'bg-primary/10 border-primary/30' : ''}">
             <div class="flex items-center gap-6 w-1/2">
@@ -960,14 +938,12 @@ function viewLeaderboard() {
             <div class="w-1/4 text-right font-mono font-bold text-primary">${u.xp.toLocaleString()}</div>
         </div>
     `).join('');
-
     return `
     <div class="max-w-4xl mx-auto py-8 relative">
         <div class="text-center mb-10">
             <h1 class="text-5xl font-black tracking-tight mb-2">The Hall of Fame</h1>
             <p class="text-primary font-bold uppercase tracking-widest text-sm">— Top 50 Apex Sharks Ranked by XP —</p>
         </div>
-        
         <div class="glass-panel rounded-3xl overflow-hidden pb-4">
             <div class="flex text-xs font-bold text-slate-500 uppercase tracking-widest p-6 border-b border-white/5">
                 <div class="w-1/2 pl-12">Rank & Profile</div>
@@ -976,7 +952,6 @@ function viewLeaderboard() {
             </div>
             ${list}
         </div>
-
         ${window.SHARK.user ? `
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-4xl bg-gradient-to-r from-primary to-[#00f2fe] p-1 rounded-2xl shadow-[0_0_30px_rgba(13,242,242,0.3)] z-50">
             <div class="bg-panel rounded-xl px-6 py-4 flex items-center justify-between">
@@ -992,9 +967,19 @@ function viewLeaderboard() {
                     <button onclick="window.router('vault')" class="bg-primary text-dark text-[10px] font-black uppercase px-4 py-1 rounded-full mt-1 hover:brightness-110 flex items-center gap-1">Go Practice <span class="material-symbols-outlined text-[12px]">bolt</span></button>
                 </div>
             </div>
-        </div>
-        ` : ''}
+        </div>` : ''}
     </div>`;
+}
+
+function populateDummyData() {
+    window.SHARK.alerts = [
+        { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" },
+        { title: "Registration for CSS 2025 has commenced.", urdu: "فیڈرل پبلک سروس کمیشن: سی ایس ایس 2025 رجسٹریشن", date: "10 Oct 2024", type: "URGENT" }
+    ];
+    window.SHARK.mcqs = [
+        { id: '1', subject: "Geography", question: "Which pass connects Pakistan with Afghanistan?", optA: "Khyber Pass", optB: "Bolan Pass", optC: "Gomal Pass", optD: "Lowari Pass", correct: "A" },
+        { id: '2', subject: "General Knowledge", question: "What is the speed of light in vacuum?", optA: "300,000 km/s", optB: "150,000 km/s", optC: "400,000 km/s", optD: "500,000 km/s", correct: "A" }
+    ];
 }
 
 function populateDummyData() {
