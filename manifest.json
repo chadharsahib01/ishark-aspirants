@@ -1,0 +1,17 @@
+{
+  "name": "I-SHARK Elite Prep",
+  "short_name": "I-SHARK",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080c0c",
+  "theme_color": "#0df2f2",
+  "description": "Enterprise-Grade Competitive Exam Preparation Platform.",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1085/1085461.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
