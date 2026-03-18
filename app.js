@@ -931,10 +931,26 @@ window.handleCSV = (e) => {
 
 async function fetchLeaderboard() {
     try {
+        // 1. Fetch the latest data from Firebase
         const snap = await db.collection('users').orderBy('xp', 'desc').limit(50).get();
         window.SHARK.allUsers = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        window.router('leaderboard'); 
-    } catch(e) { console.error(e); }
+        
+        // 2. Quietly update the DOM ONLY if the user is looking at the Leaderboard
+        const cont = document.getElementById("view-container");
+        if (cont && (cont.innerHTML.includes("The Hall of Fame") || cont.innerHTML.includes("Loading Leaderboard Data"))) {
+            cont.innerHTML = viewLeaderboard(); 
+        }
+        
+        // 3. Quietly update the Admin Panel if the Admin is looking at the Users tab
+        const adminCont = document.getElementById("admin-content");
+        if (adminCont && adminCont.innerHTML.includes("User Management")) {
+            adminCont.innerHTML = window.getAdminUsers();
+        }
+        
+        // Notice: We removed window.router('leaderboard') to kill the infinite loop!
+    } catch(e) { 
+        console.error("Leaderboard Sync Error: ", e); 
+    }
 }
 
 function viewLeaderboard() {
