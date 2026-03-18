@@ -19,6 +19,7 @@ const ADMIN_EMAIL = "makkahmarble3@gmail.com";
 
 // --- GLOBAL STATE ---
 window.SHARK = {
+    isBooted: false, // BULLETPROOF BOOTLOADER FLAG
     user: null,
     userData: { xp: 0, level: 1, quizzesTaken: 0, hours: 0 },
     mcqs: [],
@@ -34,7 +35,6 @@ window.showToast = (msg, type = 'success') => {
     if (!container) return; 
 
     const toast = document.createElement('div');
-    
     const border = type === 'error' ? 'border-rose-500 text-rose-500' : 'border-primary text-primary';
     const icon = type === 'error' ? 'error' : 'check_circle';
     const bg = type === 'error' ? 'bg-rose-500/10' : 'bg-primary/10';
@@ -62,10 +62,10 @@ window.showToast = (msg, type = 'success') => {
 window.alert = (msg) => window.showToast(msg, 'error');
 
 
-// --- AUTHENTICATION (UPDATED TO REDIRECT FLOW) ---
+// --- AUTHENTICATION ---
 window.login = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithRedirect(provider).catch(e => window.showToast("Login Redirect Failed: " + e.message, 'error'));
+    auth.signInWithRedirect(provider).catch(e => window.showToast("Login Failed: " + e.message, 'error'));
 };
 
 window.logout = () => auth.signOut().then(() => window.location.reload());
@@ -81,25 +81,25 @@ auth.onAuthStateChanged(async (user) => {
             window.SHARK.userData = { ...window.SHARK.userData, ...doc.data() };
         }
         updateNav();
-        // Look for the skeleton loader instead of the old spinner
-        if(document.getElementById('view-container').innerHTML.includes('skeleton-box')) initApp();
     } else {
         window.SHARK.user = null;
-        initApp(); 
+    }
+
+    // ROCK SOLID BOOT SEQUENCE (Ignores Skeleton HTML)
+    if (!window.SHARK.isBooted) {
+        window.SHARK.isBooted = true;
+        initApp();
+    } else if (user) {
+        window.router('dashboard');
     }
 });
 
-// Catch the result when Google redirects back to the app
 auth.getRedirectResult().then((result) => {
     if (result && result.user) {
         window.showToast(`Welcome back, ${result.user.displayName}!`, 'success');
     }
 }).catch((error) => {
-    if(error.code === 'auth/invalid-credential') {
-        console.error("Credentials mismatch. Check API Key.");
-    }
     console.error("Auth Redirect Error:", error);
-    window.showToast("Authentication Error: " + error.message, 'error');
 });
 
 
@@ -927,31 +927,20 @@ window.handleCSV = (e) => {
 };
 
 // ==========================================
-// LEADERBOARD & UTILITIES
+// SILENT LEADERBOARD (NO INFINITE LOOPS)
 // ==========================================
 
 async function fetchLeaderboard() {
     try {
-        // 1. Fetch the latest data from Firebase
         const snap = await db.collection('users').orderBy('xp', 'desc').limit(50).get();
         window.SHARK.allUsers = snap.docs.map(d => ({id: d.id, ...d.data()}));
         
-        // 2. Quietly update the DOM ONLY if the user is looking at the Leaderboard
+        // Only inject the updated HTML silently if the user is ACTUALLY looking at the Leaderboard page
         const cont = document.getElementById("view-container");
-        if (cont && (cont.innerHTML.includes("The Hall of Fame") || cont.innerHTML.includes("Loading Leaderboard Data"))) {
-            cont.innerHTML = viewLeaderboard(); 
+        if(cont && (cont.innerHTML.includes("Loading Leaderboard Data") || cont.innerHTML.includes("The Hall of Fame"))) {
+            cont.innerHTML = viewLeaderboard();
         }
-        
-        // 3. Quietly update the Admin Panel if the Admin is looking at the Users tab
-        const adminCont = document.getElementById("admin-content");
-        if (adminCont && adminCont.innerHTML.includes("User Management")) {
-            adminCont.innerHTML = window.getAdminUsers();
-        }
-        
-        // Notice: We removed window.router('leaderboard') to kill the infinite loop!
-    } catch(e) { 
-        console.error("Leaderboard Sync Error: ", e); 
-    }
+    } catch(e) { console.error("Leaderboard Sync Error:", e); }
 }
 
 function viewLeaderboard() {
