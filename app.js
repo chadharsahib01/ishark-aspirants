@@ -62,10 +62,10 @@ window.showToast = (msg, type = 'success') => {
 window.alert = (msg) => window.showToast(msg, 'error');
 
 
-// --- AUTHENTICATION ---
+// --- AUTHENTICATION (UPDATED TO REDIRECT FLOW) ---
 window.login = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(e => window.showToast("Login Failed: " + e.message, 'error'));
+    auth.signInWithRedirect(provider).catch(e => window.showToast("Login Redirect Failed: " + e.message, 'error'));
 };
 
 window.logout = () => auth.signOut().then(() => window.location.reload());
@@ -87,6 +87,20 @@ auth.onAuthStateChanged(async (user) => {
         initApp(); 
     }
 });
+
+// Catch the result when Google redirects back to the app
+auth.getRedirectResult().then((result) => {
+    if (result && result.user) {
+        window.showToast(`Welcome back, ${result.user.displayName}!`, 'success');
+    }
+}).catch((error) => {
+    if(error.code === 'auth/invalid-credential') {
+        console.error("Credentials mismatch. Check API Key.");
+    }
+    console.error("Auth Redirect Error:", error);
+    window.showToast("Authentication Error: " + error.message, 'error');
+});
+
 
 // --- BOOTSTRAP ---
 async function initApp() {
@@ -969,17 +983,6 @@ function viewLeaderboard() {
             </div>
         </div>` : ''}
     </div>`;
-}
-
-function populateDummyData() {
-    window.SHARK.alerts = [
-        { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" },
-        { title: "Registration for CSS 2025 has commenced.", urdu: "فیڈرل پبلک سروس کمیشن: سی ایس ایس 2025 رجسٹریشن", date: "10 Oct 2024", type: "URGENT" }
-    ];
-    window.SHARK.mcqs = [
-        { id: '1', subject: "Geography", question: "Which pass connects Pakistan with Afghanistan?", optA: "Khyber Pass", optB: "Bolan Pass", optC: "Gomal Pass", optD: "Lowari Pass", correct: "A" },
-        { id: '2', subject: "General Knowledge", question: "What is the speed of light in vacuum?", optA: "300,000 km/s", optB: "150,000 km/s", optC: "400,000 km/s", optD: "500,000 km/s", correct: "A" }
-    ];
 }
 
 function populateDummyData() {
