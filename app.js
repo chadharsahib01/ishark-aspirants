@@ -19,7 +19,7 @@ const ADMIN_EMAIL = "makkahmarble3@gmail.com";
 
 // --- GLOBAL STATE ---
 window.SHARK = {
-    isBooted: false, // BULLETPROOF BOOTLOADER FLAG
+    isBooted: false, // Prevents the Ghost Refresh Bug
     user: null,
     userData: { xp: 0, level: 1, quizzesTaken: 0, hours: 0 },
     mcqs: [],
@@ -71,26 +71,28 @@ window.login = () => {
 window.logout = () => auth.signOut().then(() => window.location.reload());
 
 auth.onAuthStateChanged(async (user) => {
-    if (user) {
-        window.SHARK.user = user;
-        const userRef = db.collection('users').doc(user.uid);
-        const doc = await userRef.get();
-        if(!doc.exists) {
-            await userRef.set({ name: user.displayName, email: user.email, xp: 0, level: 1, joinDate: new Date() });
+    try {
+        if (user) {
+            window.SHARK.user = user;
+            const userRef = db.collection('users').doc(user.uid);
+            const doc = await userRef.get();
+            if(!doc.exists) {
+                await userRef.set({ name: user.displayName, email: user.email, xp: 0, level: 1, joinDate: new Date() });
+            } else {
+                window.SHARK.userData = { ...window.SHARK.userData, ...doc.data() };
+            }
         } else {
-            window.SHARK.userData = { ...window.SHARK.userData, ...doc.data() };
+            window.SHARK.user = null;
         }
         updateNav();
-    } else {
-        window.SHARK.user = null;
-    }
-
-    // ROCK SOLID BOOT SEQUENCE (Ignores Skeleton HTML)
-    if (!window.SHARK.isBooted) {
-        window.SHARK.isBooted = true;
-        initApp();
-    } else if (user) {
-        window.router('dashboard');
+    } catch(error) {
+        console.error("Auth Profile Sync Error:", error);
+    } finally {
+        // FAIL-SAFE BOOT SEQUENCE: This guarantees the skeleton loader will ALWAYS be cleared.
+        if (!window.SHARK.isBooted) {
+            window.SHARK.isBooted = true;
+            initApp();
+        }
     }
 });
 
@@ -119,10 +121,16 @@ async function initApp() {
         
         if(window.SHARK.mcqs.length === 0) populateDummyData();
 
-        window.router('dashboard');
+        window.router('dashboard'); // Replaces skeleton immediately
     } catch(e) {
-        console.error(e);
-        document.getElementById("view-container").innerHTML = `<div class="text-red-500 p-10 text-center font-mono">CRITICAL DB LINK FAILURE</div>`;
+        console.error("Bootloader Crash:", e);
+        document.getElementById("view-container").innerHTML = `
+            <div class="text-rose-500 p-10 text-center glass-panel rounded-2xl border border-rose-500/20 max-w-lg mx-auto mt-10">
+                <span class="material-symbols-outlined text-5xl mb-2">wifi_off</span>
+                <p class="font-bold text-xl mb-2">CRITICAL DB LINK FAILURE</p>
+                <p class="text-sm text-slate-400">Failed to connect to Firebase. Check your internet or API keys.</p>
+                <button onclick="window.location.reload()" class="mt-6 px-6 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10">Retry Connection</button>
+            </div>`;
     }
 }
 
@@ -140,23 +148,36 @@ function updateNav() {
     }
 }
 
-// --- ROUTER ---
+// --- FAIL-SAFE ROUTER ---
 window.router = (view) => {
     const cont = document.getElementById("view-container");
+    if(!cont) return;
+
     cont.classList.remove('animate-fade-in');
     void cont.offsetWidth; 
     cont.classList.add('animate-fade-in');
     window.scrollTo(0,0);
 
-    switch(view) {
-        case 'dashboard': cont.innerHTML = viewDashboard(); break;
-        case 'vault': cont.innerHTML = viewVault(); break;
-        case 'quiz': cont.innerHTML = viewQuiz(); startTimer(); break;
-        case 'analysis': cont.innerHTML = viewAnalysis(); break;
-        case 'alerts': cont.innerHTML = viewAlerts(); break;
-        case 'leaderboard': cont.innerHTML = viewLeaderboard(); fetchLeaderboard(); break;
-        case 'admin': cont.innerHTML = viewAdmin(); break;
-        default: cont.innerHTML = viewDashboard();
+    try {
+        switch(view) {
+            case 'dashboard': cont.innerHTML = viewDashboard(); break;
+            case 'vault': cont.innerHTML = viewVault(); break;
+            case 'quiz': cont.innerHTML = viewQuiz(); startTimer(); break;
+            case 'analysis': cont.innerHTML = viewAnalysis(); break;
+            case 'alerts': cont.innerHTML = viewAlerts(); break;
+            case 'leaderboard': cont.innerHTML = viewLeaderboard(); fetchLeaderboard(); break;
+            case 'admin': cont.innerHTML = viewAdmin(); break;
+            default: cont.innerHTML = viewDashboard();
+        }
+    } catch (e) {
+        console.error("Router UI Crash:", e);
+        cont.innerHTML = `
+            <div class="text-center p-10 text-rose-500 glass-panel rounded-2xl max-w-lg mx-auto mt-10">
+                <span class="material-symbols-outlined text-5xl mb-2">warning</span>
+                <p class="font-bold text-xl mb-1">UI Render Error</p>
+                <p class="text-sm text-slate-400 bg-black/50 p-4 rounded mt-4 font-mono break-words">${e.message}</p>
+                <button onclick="window.router('dashboard')" class="mt-6 px-6 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10">Force Return Home</button>
+            </div>`;
     }
 };
 
@@ -418,7 +439,7 @@ function viewAnalysis() {
             <p class="font-bold mb-4">${h.q.question}</p>
             <div class="bg-white/5 p-4 rounded-lg mb-2 ${h.isCorrect ? '' : 'border border-rose-500/30'}">
                 <span class="text-xs text-slate-400 block mb-1">Your Answer:</span>
-                <p class="${h.isCorrect ? 'text-emerald-400' : 'text-rose-400'}">${h.q['opt'+h.selected]}</p>
+                <p class="${h.isCorrect ? 'textemerald-400' : 'text-rose-400'}">${h.q['opt'+h.selected]}</p>
             </div>
             ${!h.isCorrect ? `
             <div class="bg-primary/10 border border-primary/20 p-4 rounded-lg">
@@ -935,7 +956,6 @@ async function fetchLeaderboard() {
         const snap = await db.collection('users').orderBy('xp', 'desc').limit(50).get();
         window.SHARK.allUsers = snap.docs.map(d => ({id: d.id, ...d.data()}));
         
-        // Only inject the updated HTML silently if the user is ACTUALLY looking at the Leaderboard page
         const cont = document.getElementById("view-container");
         if(cont && (cont.innerHTML.includes("Loading Leaderboard Data") || cont.innerHTML.includes("The Hall of Fame"))) {
             cont.innerHTML = viewLeaderboard();
