@@ -1,6 +1,6 @@
 /**
  * I-SHARK ENTERPRISE CORE
- * Architecture: Serverless SPA via Vanilla ES6
+ * Architecture: Serverless SPA via Vanilla ES6 (Hash Routing enabled)
  */
 
 const firebaseConfig = {
@@ -17,9 +17,12 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 const ADMIN_EMAIL = "makkahmarble3@gmail.com";
 
+// Enable Offline Data Persistence (Massive Speed Boost + Fixes Skeletons)
+db.enablePersistence().catch(err => console.warn("Offline mode limited:", err));
+
 // --- GLOBAL STATE ---
 window.SHARK = {
-    isBooted: false, // Prevents the Ghost Refresh Bug
+    isBooted: false,
     user: null,
     userData: { xp: 0, level: 1, quizzesTaken: 0, hours: 0 },
     mcqs: [],
@@ -28,6 +31,8 @@ window.SHARK = {
     subjects: ['General Knowledge', 'Pakistan Affairs', 'Islamiyat', 'Everyday Science', 'English', 'Current Affairs'],
     quizSession: { active: false, subject: '', pool: [], index: 0, score: 0, timeStart: null, history: [] }
 };
+
+let quizTimer; // Moved out so the router can kill it
 
 // --- ENTERPRISE TOAST SYSTEM ---
 window.showToast = (msg, type = 'success') => {
@@ -68,7 +73,10 @@ window.login = () => {
     auth.signInWithRedirect(provider).catch(e => window.showToast("Login Failed: " + e.message, 'error'));
 };
 
-window.logout = () => auth.signOut().then(() => window.location.reload());
+window.logout = () => auth.signOut().then(() => {
+    window.location.hash = '';
+    window.location.reload();
+});
 
 auth.onAuthStateChanged(async (user) => {
     try {
@@ -88,7 +96,6 @@ auth.onAuthStateChanged(async (user) => {
     } catch(error) {
         console.error("Auth Profile Sync Error:", error);
     } finally {
-        // FAIL-SAFE BOOT SEQUENCE: This guarantees the skeleton loader will ALWAYS be cleared.
         if (!window.SHARK.isBooted) {
             window.SHARK.isBooted = true;
             initApp();
@@ -121,14 +128,17 @@ async function initApp() {
         
         if(window.SHARK.mcqs.length === 0) populateDummyData();
 
-        window.router('dashboard'); // Replaces skeleton immediately
+        // Boot to Hash URL if exists, else Dashboard
+        const initialRoute = window.location.hash.substring(1) || 'dashboard';
+        window.router(initialRoute, true); 
+
     } catch(e) {
         console.error("Bootloader Crash:", e);
         document.getElementById("view-container").innerHTML = `
             <div class="text-rose-500 p-10 text-center glass-panel rounded-2xl border border-rose-500/20 max-w-lg mx-auto mt-10">
                 <span class="material-symbols-outlined text-5xl mb-2">wifi_off</span>
                 <p class="font-bold text-xl mb-2">CRITICAL DB LINK FAILURE</p>
-                <p class="text-sm text-slate-400">Failed to connect to Firebase. Check your internet or API keys.</p>
+                <p class="text-sm text-slate-400">Failed to connect to Firebase. Using offline cache if available.</p>
                 <button onclick="window.location.reload()" class="mt-6 px-6 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10">Retry Connection</button>
             </div>`;
     }
@@ -148,10 +158,32 @@ function updateNav() {
     }
 }
 
-// --- FAIL-SAFE ROUTER ---
-window.router = (view) => {
+// --- HASH ROUTING EVENT LISTENER ---
+window.addEventListener('hashchange', () => {
+    if(!window.SHARK.isBooted) return;
+    const view = window.location.hash.substring(1) || 'dashboard';
+    window.router(view, true);
+});
+
+// --- ENTERPRISE ROUTER ---
+window.router = (view, fromHash = false) => {
     const cont = document.getElementById("view-container");
     if(!cont) return;
+
+    // Fix Memory Leak: Always clear quiz timer when changing tabs
+    if (quizTimer) {
+        clearInterval(quizTimer);
+        window.SHARK.quizSession.active = false;
+    }
+
+    // Sync URL Hash
+    if(!fromHash) window.location.hash = view;
+
+    // Manage Active State Highlighting for Nav Bars
+    document.querySelectorAll('.nav-link, .mobile-nav-link').forEach(el => {
+        el.classList.remove('text-primary', 'active');
+        if(el.dataset.route === view) el.classList.add('text-primary', 'active');
+    });
 
     cont.classList.remove('animate-fade-in');
     void cont.offsetWidth; 
@@ -171,13 +203,7 @@ window.router = (view) => {
         }
     } catch (e) {
         console.error("Router UI Crash:", e);
-        cont.innerHTML = `
-            <div class="text-center p-10 text-rose-500 glass-panel rounded-2xl max-w-lg mx-auto mt-10">
-                <span class="material-symbols-outlined text-5xl mb-2">warning</span>
-                <p class="font-bold text-xl mb-1">UI Render Error</p>
-                <p class="text-sm text-slate-400 bg-black/50 p-4 rounded mt-4 font-mono break-words">${e.message}</p>
-                <button onclick="window.router('dashboard')" class="mt-6 px-6 py-2 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10">Force Return Home</button>
-            </div>`;
+        cont.innerHTML = `<div class="text-center p-10 text-rose-500 glass-panel rounded-2xl max-w-lg mx-auto mt-10">UI Render Error</div>`;
     }
 };
 
@@ -316,10 +342,9 @@ window.initQuiz = (subject) => {
     window.router('quiz');
 };
 
-let quizTimer;
 function startTimer() {
     let sec = 0;
-    clearInterval(quizTimer);
+    if(quizTimer) clearInterval(quizTimer);
     quizTimer = setInterval(() => {
         sec++;
         const el = document.getElementById('q-timer');
@@ -390,6 +415,9 @@ window.submitAnswer = () => {
     const q = qs.pool[qs.index];
     const isCorrect = currentSelection === q.correct;
     
+    // Prevent double clicking issue
+    document.getElementById('submit-ans-btn').disabled = true;
+    
     if(isCorrect) qs.score++;
     qs.history.push({ q, selected: currentSelection, isCorrect });
     
@@ -401,7 +429,7 @@ window.submitAnswer = () => {
 };
 
 function finalizeQuiz() {
-    clearInterval(quizTimer);
+    if(quizTimer) clearInterval(quizTimer);
     const qs = window.SHARK.quizSession;
     const timeSpent = Math.floor((Date.now() - qs.timeStart) / 1000);
     const xpEarned = qs.score * 50;
@@ -439,7 +467,7 @@ function viewAnalysis() {
             <p class="font-bold mb-4">${h.q.question}</p>
             <div class="bg-white/5 p-4 rounded-lg mb-2 ${h.isCorrect ? '' : 'border border-rose-500/30'}">
                 <span class="text-xs text-slate-400 block mb-1">Your Answer:</span>
-                <p class="${h.isCorrect ? 'textemerald-400' : 'text-rose-400'}">${h.q['opt'+h.selected]}</p>
+                <p class="${h.isCorrect ? 'text-emerald-400' : 'text-rose-400'}">${h.q['opt'+h.selected]}</p>
             </div>
             ${!h.isCorrect ? `
             <div class="bg-primary/10 border border-primary/20 p-4 rounded-lg">
@@ -1013,12 +1041,9 @@ function viewLeaderboard() {
 
 function populateDummyData() {
     window.SHARK.alerts = [
-        { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" },
-        { title: "Registration for CSS 2025 has commenced.", urdu: "فیڈرل پبلک سروس کمیشن: سی ایس ایس 2025 رجسٹریشن", date: "10 Oct 2024", type: "URGENT" }
+        { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" }
     ];
     window.SHARK.mcqs = [
-        { subject: "Geography", question: "Which pass connects Pakistan with Afghanistan?", optA: "Khyber Pass", optB: "Bolan Pass", optC: "Gomal Pass", optD: "Lowari Pass", correct: "A" },
-        { subject: "General Knowledge", question: "What is the speed of light in vacuum?", optA: "300,000 km/s", optB: "150,000 km/s", optC: "400,000 km/s", optD: "500,000 km/s", correct: "A" },
-        { subject: "Pakistan Affairs", question: "When did Pakistan become a Republic?", optA: "1947", optB: "1956", optC: "1962", optD: "1973", correct: "B" }
+        { subject: "Geography", question: "Which pass connects Pakistan with Afghanistan?", optA: "Khyber Pass", optB: "Bolan Pass", optC: "Gomal Pass", optD: "Lowari Pass", correct: "A" }
     ];
 }
