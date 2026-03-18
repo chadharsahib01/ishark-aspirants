@@ -81,7 +81,8 @@ auth.onAuthStateChanged(async (user) => {
             window.SHARK.userData = { ...window.SHARK.userData, ...doc.data() };
         }
         updateNav();
-        if(document.getElementById('view-container').innerHTML.includes('autorenew')) initApp();
+        // Look for the skeleton loader instead of the old spinner
+        if(document.getElementById('view-container').innerHTML.includes('skeleton-box')) initApp();
     } else {
         window.SHARK.user = null;
         initApp(); 
