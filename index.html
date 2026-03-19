@@ -26,7 +26,7 @@
 </head>
 <body class="bg-dark text-slate-200 antialiased selection:bg-primary/30">
 
- <nav id="top-nav" class="fixed top-0 w-full z-50 bg-dark/90 backdrop-blur-md border-b border-white/5 px-6 py-4 transition-transform duration-300">
+    <nav id="top-nav" class="fixed top-0 w-full z-50 bg-dark/90 backdrop-blur-md border-b border-white/5 px-6 py-4 transition-transform duration-300">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3 cursor-pointer" onclick="window.router('dashboard')">
                 <span class="text-primary material-symbols-outlined text-3xl">tsunami</span>
@@ -46,13 +46,13 @@
                         <p class="text-[10px] text-primary font-bold tracking-widest uppercase">Experience</p>
                         <p class="text-xs font-mono">Level <span id="nav-level">1</span> • <span id="nav-xp">0</span> XP</p>
                     </div>
-                    <div class="relative group">
-                        <div class="h-10 w-10 rounded-full border-2 border-primary/30 flex items-center justify-center bg-primary/10 text-primary font-bold cursor-pointer transition-all group-hover:border-primary">
+                    <div class="relative">
+                        <div onclick="document.getElementById('profile-dropdown').classList.toggle('hidden')" class="h-10 w-10 rounded-full border-2 border-primary/30 flex items-center justify-center bg-primary/10 text-primary font-bold cursor-pointer transition-all hover:border-primary shadow-lg shadow-primary/20">
                             <span id="user-initial">U</span>
                         </div>
-                        <div class="absolute right-0 mt-2 w-48 glass-panel rounded-xl py-2 hidden group-hover:block">
-                            <button id="admin-link" onclick="window.router('admin')" class="hidden w-full text-left px-4 py-2 text-sm text-primary hover:bg-white/5 font-bold">Command Center</button>
-                            <button onclick="window.logout()" class="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 font-bold">Sign Out</button>
+                        <div id="profile-dropdown" class="absolute right-0 mt-4 w-48 glass-panel rounded-xl py-2 hidden z-50 border border-primary/30 shadow-2xl">
+                            <button id="admin-link" onclick="window.router('admin'); document.getElementById('profile-dropdown').classList.add('hidden')" class="hidden w-full text-left px-4 py-3 text-sm text-primary hover:bg-white/10 font-bold border-b border-white/5">Command Center</button>
+                            <button onclick="window.logout()" class="w-full text-left px-4 py-3 text-sm text-rose-400 hover:bg-white/10 font-bold">Sign Out</button>
                         </div>
                     </div>
                 </div>

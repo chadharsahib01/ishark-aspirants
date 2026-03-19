@@ -17,14 +17,14 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 const ADMIN_EMAIL = "makkahmarble3@gmail.com";
 
-// Enable Offline Data Persistence (Massive Speed Boost + Fixes Skeletons)
 db.enablePersistence().catch(err => console.warn("Offline mode limited:", err));
 
 // --- GLOBAL STATE ---
 window.SHARK = {
     isBooted: false,
+    preventNextRender: false, 
     user: null,
-    userData: { xp: 0, level: 1, quizzesTaken: 0, hours: 0 },
+    userData: { xp: 0, level: 1, quizzesTaken: 0, hours: 0, activity: {} },
     mcqs: [],
     alerts: [],
     allUsers: [],
@@ -32,7 +32,16 @@ window.SHARK = {
     quizSession: { active: false, subject: '', pool: [], index: 0, score: 0, timeStart: null, history: [] }
 };
 
-let quizTimer; // Moved out so the router can kill it
+let quizTimer; 
+
+// --- FIX: GLOBAL CLICK LISTENER FOR MOBILE DROPDOWN ---
+window.addEventListener('click', (e) => {
+    const profileBtn = document.getElementById('user-profile');
+    const dropdown = document.getElementById('profile-dropdown');
+    if (profileBtn && dropdown && !profileBtn.contains(e.target)) {
+        dropdown.classList.add('hidden');
+    }
+});
 
 // --- ENTERPRISE TOAST SYSTEM ---
 window.showToast = (msg, type = 'success') => {
@@ -85,7 +94,7 @@ auth.onAuthStateChanged(async (user) => {
             const userRef = db.collection('users').doc(user.uid);
             const doc = await userRef.get();
             if(!doc.exists) {
-                await userRef.set({ name: user.displayName, email: user.email, xp: 0, level: 1, joinDate: new Date() });
+                await userRef.set({ name: user.displayName, email: user.email, xp: 0, level: 1, quizzesTaken: 0, hours: 0, joinDate: new Date() });
             } else {
                 window.SHARK.userData = { ...window.SHARK.userData, ...doc.data() };
             }
@@ -117,7 +126,7 @@ async function initApp() {
     try {
         const [mcqSnap, alertSnap] = await Promise.all([
             db.collection("mcqs").limit(2000).get(), 
-            db.collection("alerts").orderBy("date", "desc").limit(20).get()
+            db.collection("alerts").orderBy("timestamp", "desc").limit(20).get()
         ]);
         
         window.SHARK.mcqs = mcqSnap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -126,9 +135,6 @@ async function initApp() {
         const dynamicSubjects = [...new Set(window.SHARK.mcqs.map(m => m.subject))].filter(Boolean);
         window.SHARK.subjects = [...new Set([...window.SHARK.subjects, ...dynamicSubjects])];
         
-        if(window.SHARK.mcqs.length === 0) populateDummyData();
-
-        // Boot to Hash URL if exists, else Dashboard
         const initialRoute = window.location.hash.substring(1) || 'dashboard';
         window.router(initialRoute, true); 
 
@@ -151,10 +157,11 @@ function updateNav() {
     document.getElementById('user-profile').classList.remove('hidden');
     document.getElementById('user-initial').innerText = u.displayName ? u.displayName.charAt(0) : 'S';
     document.getElementById('nav-xp').innerText = window.SHARK.userData.xp.toLocaleString();
-    document.getElementById('nav-level').innerText = window.SHARK.userData.level;
+    document.getElementById('nav-level').innerText = window.SHARK.userData.level || 1;
     
     if(u.email === ADMIN_EMAIL) {
-        document.getElementById('admin-link').classList.remove('hidden');
+        const adminLnk = document.getElementById('admin-link');
+        if(adminLnk) adminLnk.classList.remove('hidden');
     }
 }
 
@@ -165,25 +172,36 @@ window.addEventListener('hashchange', () => {
     window.router(view, true);
 });
 
-// --- ENTERPRISE ROUTER ---
+// --- ENTERPRISE ROUTER WITH STRICT EXAM MODE ---
 window.router = (view, fromHash = false) => {
     const cont = document.getElementById("view-container");
     if(!cont) return;
 
-    // Fix Memory Leak: Always clear quiz timer when changing tabs
-    if (quizTimer) {
-        clearInterval(quizTimer);
-        window.SHARK.quizSession.active = false;
+    if (window.SHARK.quizSession && window.SHARK.quizSession.active && view !== 'quiz' && view !== 'analysis') {
+        if(!confirm("WARNING: Leaving this tab will abandon your active exam. Proceed?")) {
+            window.SHARK.preventNextRender = true; 
+            window.location.hash = 'quiz'; 
+            return;
+        } else {
+            clearInterval(quizTimer); 
+            window.SHARK.quizSession.active = false;
+        }
     }
 
-    // Sync URL Hash
+    if (window.SHARK.preventNextRender && view === 'quiz') {
+        window.SHARK.preventNextRender = false;
+        return; 
+    }
+
     if(!fromHash) window.location.hash = view;
 
-    // Manage Active State Highlighting for Nav Bars
     document.querySelectorAll('.nav-link, .mobile-nav-link').forEach(el => {
         el.classList.remove('text-primary', 'active');
         if(el.dataset.route === view) el.classList.add('text-primary', 'active');
     });
+
+    const dropdown = document.getElementById('profile-dropdown');
+    if(dropdown) dropdown.classList.add('hidden');
 
     cont.classList.remove('animate-fade-in');
     void cont.offsetWidth; 
@@ -312,6 +330,7 @@ function viewVault() {
     
     const cards = window.SHARK.subjects.map(s => {
         const count = window.SHARK.mcqs.filter(m => m.subject === s).length;
+        if(count === 0) return ''; 
         return `
         <div onclick="window.initQuiz('${s}')" class="glass-panel p-8 rounded-2xl cursor-pointer group relative overflow-hidden">
             <div class="absolute top-6 right-6 px-2 py-1 bg-primary/20 text-primary text-[10px] font-bold rounded uppercase">Active</div>
@@ -329,7 +348,9 @@ function viewVault() {
             <h1 class="text-4xl font-black tracking-tight mb-2">Subject Vault</h1>
             <p class="text-slate-400">Choose your field of study to begin practice. Master each category.</p>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${cards}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            ${cards || `<p class="text-slate-500 italic col-span-full text-center py-10">No subjects populated yet.</p>`}
+        </div>
     </div>`;
 }
 
@@ -372,8 +393,9 @@ function viewQuiz() {
         <div class="glass-panel p-10 rounded-3xl relative">
             <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-panel border border-white/10 px-4 py-1 rounded-full text-[10px] text-slate-400 uppercase tracking-widest font-bold">High Stakes</div>
             
-            <h2 class="text-3xl font-bold text-center leading-tight mb-10">${q.question}</h2>
-            ${q.image ? `<img src="${q.image}" class="w-full rounded-xl mb-8 border border-white/10">` : ''}
+            <h2 class="text-2xl md:text-3xl font-bold text-center leading-tight mb-10">${q.question}</h2>
+            
+            ${q.image ? `<img src="${q.image}" class="w-full max-h-64 object-contain rounded-xl mb-8 border border-white/10">` : ''}
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="options-container">
                 ${['A','B','C','D'].map(opt => `
@@ -401,45 +423,86 @@ window.selectOption = (opt) => {
     currentSelection = opt;
     ['A','B','C','D'].forEach(o => {
         const btn = document.getElementById(`opt-btn-${o}`);
-        btn.classList.remove('border-primary', 'bg-primary/10');
-        btn.querySelector('div:last-child').classList.remove('border-primary', 'bg-primary');
+        if(btn) {
+            btn.classList.remove('border-primary', 'bg-primary/10');
+            btn.querySelector('div:last-child').classList.remove('border-primary', 'bg-primary');
+        }
     });
     const selected = document.getElementById(`opt-btn-${opt}`);
-    selected.classList.add('border-primary', 'bg-primary/10');
-    selected.querySelector('div:last-child').classList.add('border-primary', 'bg-primary');
-    document.getElementById('submit-ans-btn').disabled = false;
+    if(selected) {
+        selected.classList.add('border-primary', 'bg-primary/10');
+        selected.querySelector('div:last-child').classList.add('border-primary', 'bg-primary');
+        document.getElementById('submit-ans-btn').disabled = false;
+    }
 };
 
+// FIX 1: REAL-TIME QUIZ FEEDBACK (NO BLIND JUMPS)
 window.submitAnswer = () => {
     const qs = window.SHARK.quizSession;
     const q = qs.pool[qs.index];
     const isCorrect = currentSelection === q.correct;
     
-    // Prevent double clicking issue
+    // Disable interactions immediately
     document.getElementById('submit-ans-btn').disabled = true;
+    ['A','B','C','D'].forEach(o => document.getElementById(`opt-btn-${o}`).disabled = true);
     
+    // Visual Feedback
+    const selectedBtn = document.getElementById(`opt-btn-${currentSelection}`);
+    const correctBtn = document.getElementById(`opt-btn-${q.correct}`);
+    
+    if (isCorrect) {
+        selectedBtn.classList.replace('bg-primary/10', 'bg-emerald-500/20');
+        selectedBtn.classList.replace('border-primary', 'border-emerald-500');
+        window.showToast("Correct!", "success");
+    } else {
+        selectedBtn.classList.replace('bg-primary/10', 'bg-rose-500/20');
+        selectedBtn.classList.replace('border-primary', 'border-rose-500');
+        if(correctBtn) {
+            correctBtn.classList.add('border-emerald-500', 'bg-emerald-500/20');
+        }
+        window.showToast("Incorrect", "error");
+    }
+
     if(isCorrect) qs.score++;
     qs.history.push({ q, selected: currentSelection, isCorrect });
     
     currentSelection = null;
     qs.index++;
     
-    if(qs.index >= qs.pool.length) finalizeQuiz();
-    else window.router('quiz'); 
+    // Pause for 1.2s to let user see feedback before next render
+    setTimeout(() => {
+        if(qs.index >= qs.pool.length) finalizeQuiz();
+        else window.router('quiz'); 
+    }, 1200);
 };
 
+// FIX 2 & 6: LEVEL UP ENGINE AND TIME TRACKING
 function finalizeQuiz() {
     if(quizTimer) clearInterval(quizTimer);
-    const qs = window.SHARK.quizSession;
-    const timeSpent = Math.floor((Date.now() - qs.timeStart) / 1000);
-    const xpEarned = qs.score * 50;
+    window.SHARK.quizSession.active = false; 
     
-    qs.finalTime = `${Math.floor(timeSpent/60)}:${(timeSpent%60).toString().padStart(2,'0')}`;
+    const qs = window.SHARK.quizSession;
+    const timeSpentSec = Math.floor((Date.now() - qs.timeStart) / 1000);
+    const xpEarned = qs.score * 50;
+    const hoursEarned = timeSpentSec / 3600;
+    
+    qs.finalTime = `${Math.floor(timeSpentSec/60)}:${(timeSpentSec%60).toString().padStart(2,'0')}`;
     qs.xpEarned = xpEarned;
 
     if(window.SHARK.user) {
-        window.SHARK.userData.xp += xpEarned;
-        window.SHARK.userData.quizzesTaken = (window.SHARK.userData.quizzesTaken || 0) + 1;
+        // Calculate new Level
+        const newXp = window.SHARK.userData.xp + xpEarned;
+        const newLevel = Math.floor(newXp / 1000) + 1;
+        const leveledUp = newLevel > window.SHARK.userData.level;
+        
+        if (leveledUp) {
+            window.showToast(`🎉 LEVEL UP! You are now Level ${newLevel}!`, 'success');
+        }
+
+        window.SHARK.userData.xp = newXp;
+        window.SHARK.userData.level = newLevel;
+        window.SHARK.userData.quizzesTaken += 1;
+        window.SHARK.userData.hours = (window.SHARK.userData.hours || 0) + hoursEarned;
         
         const today = new Date().toLocaleDateString('en-CA'); 
         if (!window.SHARK.userData.activity) window.SHARK.userData.activity = {};
@@ -447,9 +510,14 @@ function finalizeQuiz() {
 
         db.collection('users').doc(window.SHARK.user.uid).update({
             xp: firebase.firestore.FieldValue.increment(xpEarned),
+            level: newLevel,
             quizzesTaken: firebase.firestore.FieldValue.increment(1),
+            hours: firebase.firestore.FieldValue.increment(hoursEarned),
             [`activity.${today}`]: firebase.firestore.FieldValue.increment(xpEarned)
         });
+        
+        // Update Nav Bar immediately
+        updateNav();
     }
     window.router('analysis');
 }
@@ -528,7 +596,6 @@ function viewAnalysis() {
     </div>`;
 }
 
-// --- SOCIAL SHARING LOGIC ---
 window.shareResult = () => {
     const qs = window.SHARK.quizSession;
     const percent = Math.round((qs.score / qs.pool.length) * 100);
@@ -548,6 +615,7 @@ window.shareResult = () => {
     }
 };
 
+// FIX 4: REPAIR BROKEN ALERT BUTTONS
 function viewAlerts() {
     const alertHtml = window.SHARK.alerts.map(a => `
         <div class="glass-panel p-6 rounded-2xl flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -560,10 +628,10 @@ function viewAlerts() {
                 <p class="text-sm text-slate-400">${a.title}</p>
             </div>
             <div class="flex flex-col gap-2 min-w-[120px]">
-                <button class="btn-ghost px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                <button onclick="window.showToast('Full alert details opening soon...', 'success')" class="btn-ghost px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
                     ${a.type === 'EXPIRED' ? 'Closed' : 'View Details'}
                 </button>
-                <button class="text-slate-500 hover:text-primary flex justify-center"><span class="material-symbols-outlined">bookmark</span></button>
+                <button onclick="window.showToast('Alert Bookmarked!', 'success')" class="text-slate-500 hover:text-primary flex justify-center"><span class="material-symbols-outlined">bookmark</span></button>
             </div>
         </div>
     `).join('');
@@ -619,7 +687,18 @@ function viewAdmin() {
     </div>`;
 }
 
-window.getAdminDash = () => `
+window.getAdminDash = () => {
+    const alertsList = window.SHARK.alerts.slice(0, 8).map(a => `
+        <div class="flex justify-between items-center p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+            <div class="truncate pr-4 flex items-center gap-2">
+                <span class="px-2 py-0.5 bg-white/10 rounded text-[8px] font-bold uppercase ${a.type==='NEW'?'text-primary':''}">${a.type}</span>
+                <span class="text-sm text-slate-300 truncate">${a.title}</span>
+            </div>
+            <button onclick="window.deleteAlert('${a.id}')" class="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 rounded"><span class="material-symbols-outlined text-sm block">delete</span></button>
+        </div>
+    `).join('') || '<p class="text-slate-500 text-sm p-4 text-center">No alerts to manage.</p>';
+
+    return `
     <div class="grid grid-cols-3 gap-6 mb-8 animate-fade-in">
         <div class="bg-panel border border-white/5 p-6 rounded-xl">
             <p class="text-xs text-slate-400 font-bold uppercase mb-1">Total MCQs</p>
@@ -647,38 +726,31 @@ window.getAdminDash = () => `
         </div>
 
         <div class="glass-panel p-8 rounded-2xl flex flex-col h-full">
-            <h3 class="text-xl font-bold mb-6 flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary">campaign</span> Publish New Alert</h3>
-            <div class="space-y-4 flex-grow flex flex-col justify-between">
-                <div>
-                    <label class="text-xs text-slate-400 font-bold mb-1 block">Alert Title (English)</label>
-                    <input id="alert-title" maxlength="100" placeholder="e.g., PPSC Lecturer Jobs 2024" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
+            <h3 class="text-xl font-bold mb-6 flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary">campaign</span> Alerts Manager</h3>
+            
+            <div class="flex-grow bg-black/30 border border-white/5 rounded-xl overflow-hidden mb-6 overflow-y-auto max-h-[180px]">
+                ${alertsList}
+            </div>
+
+            <div class="space-y-4 border-t border-white/10 pt-4">
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="alert-title" maxlength="100" placeholder="English Title..." class="bg-black/50 border border-white/10 rounded-lg p-2 text-xs outline-none focus:border-primary text-white">
+                    <select id="alert-type" class="bg-black/50 border border-white/10 rounded-lg p-2 text-xs outline-none focus:border-primary text-white">
+                        <option value="NEW">NEW</option>
+                        <option value="URGENT">URGENT</option>
+                        <option value="EXPIRED">EXPIRED</option>
+                    </select>
                 </div>
-                <div>
-                    <label class="text-xs text-slate-400 font-bold mb-1 block">Urdu Description (اردو متن)</label>
-                    <textarea id="alert-urdu" dir="rtl" maxlength="500" placeholder="یہاں تفصیل لکھیں..." class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-24 outline-none focus:border-primary urdu-text text-white transition-colors"></textarea>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-xs text-slate-400 font-bold mb-1 block">Alert Type</label>
-                        <select id="alert-type" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white cursor-pointer transition-colors">
-                            <option value="NEW">NEW</option>
-                            <option value="URGENT">URGENT</option>
-                            <option value="EXPIRED">EXPIRED</option>
-                        </select>
-                    </div>
-                </div>
+                <textarea id="alert-urdu" dir="rtl" maxlength="500" placeholder="Urdu Text..." class="w-full bg-black/50 border border-white/10 rounded-lg p-2 text-xs h-16 outline-none focus:border-primary urdu-text text-white"></textarea>
                 
-                <div class="pt-2">
-                    <p id="alert-status" class="text-xs font-bold mb-2 hidden text-center"></p>
-                    <button id="publish-btn" onclick="publishAlert()" class="btn-primary w-full py-4 rounded-lg text-sm uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span class="material-symbols-outlined text-lg hidden" id="publish-spinner">sync</span>
-                        <span id="publish-btn-text">Broadcast Alert</span>
-                    </button>
-                </div>
+                <button id="publish-btn" onclick="publishAlert()" class="btn-primary w-full py-3 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+                    <span id="publish-btn-text">Publish Alert</span>
+                </button>
             </div>
         </div>
     </div>
 `;
+}
 
 window.getAdminUsers = () => {
     if(!window.SHARK.allUsers || window.SHARK.allUsers.length === 0) fetchLeaderboard(); 
@@ -717,7 +789,7 @@ window.getAdminUsers = () => {
                         <th class="py-3 px-4 font-bold">Status</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="admin-user-table-body">
                     ${userRows || `<tr><td colspan="5" class="py-10 text-center text-slate-500">Loading user data...</td></tr>`}
                 </tbody>
             </table>
@@ -725,7 +797,7 @@ window.getAdminUsers = () => {
     </div>`;
 };
 
-// --- MCQ MANAGEMENT UI ---
+// --- FIX 3: MCQ MANAGEMENT UI (NOW WITH IMAGE SUPPORT) ---
 window.getAdminMCQs = () => {
     setTimeout(() => window.renderMCQTable(), 0);
 
@@ -754,11 +826,12 @@ window.getAdminMCQs = () => {
             </div>
         </div>
 
-        <div class="glass-panel p-6 rounded-2xl flex flex-col h-max sticky top-32">
+        <div class="glass-panel p-6 rounded-2xl flex flex-col h-max sticky top-32 overflow-y-auto max-h-[80vh]">
             <h3 id="mcq-form-title" class="text-xl font-bold mb-6 flex items-center gap-2 text-white"><span class="material-symbols-outlined text-primary" id="form-icon">add_box</span> <span id="form-title-text">Add New MCQ</span></h3>
             <input type="hidden" id="single-id" value="">
             <div class="space-y-4 flex-grow">
                 <textarea id="single-q" placeholder="Type the question here..." class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm h-24 outline-none focus:border-primary text-white transition-colors"></textarea>
+                <input id="single-img" placeholder="Image URL (Optional)" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-primary transition-colors">
                 <input id="single-a" placeholder="Option A" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                 <input id="single-b" placeholder="Option B" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
                 <input id="single-c" placeholder="Option C" class="w-full bg-black/50 border border-white/10 rounded-lg p-3 text-sm outline-none focus:border-primary text-white transition-colors">
@@ -774,7 +847,6 @@ window.getAdminMCQs = () => {
                 </div>
                 <div class="pt-4">
                     <button id="save-mcq-btn" onclick="window.saveSingleMCQ()" class="btn-primary w-full py-4 rounded-lg text-sm font-bold uppercase tracking-widest flex justify-center items-center gap-2 transition-all">
-                        <span class="material-symbols-outlined text-lg hidden" id="save-mcq-spinner">sync</span>
                         <span id="save-mcq-text">Save to Database</span>
                     </button>
                     <button onclick="window.resetMCQForm()" class="w-full py-3 mt-2 text-xs font-bold tracking-widest uppercase text-slate-500 hover:text-white transition-colors">Clear Form</button>
@@ -789,15 +861,20 @@ window.renderMCQTable = (filterTerm = '') => {
     const tbody = document.getElementById('mcq-table-body');
     if(!tbody) return;
     const term = filterTerm.toLowerCase();
-    const filtered = window.SHARK.mcqs.filter(m => 
+    
+    const matching = window.SHARK.mcqs.filter(m => 
         m.question.toLowerCase().includes(term) || 
         m.subject.toLowerCase().includes(term)
-    ).slice(0, 50);
+    );
+    
+    const filtered = matching.slice(0, 50);
+    
     if(filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="3" class="p-10 text-center text-slate-500 italic">No questions found.</td></tr>`;
         return;
     }
-    tbody.innerHTML = filtered.map(m => `
+    
+    let html = filtered.map(m => `
         <tr class="border-b border-white/5 hover:bg-white/5 transition-colors group">
             <td class="py-4 px-6 text-sm font-medium text-slate-200 line-clamp-2">${m.question}</td>
             <td class="py-4 px-4 text-xs font-bold text-primary tracking-wider uppercase">${m.subject}</td>
@@ -807,26 +884,37 @@ window.renderMCQTable = (filterTerm = '') => {
             </td>
         </tr>
     `).join('');
+    
+    if (matching.length > 50) {
+        html += `<tr><td colspan="3" class="py-4 text-center text-xs text-slate-500 bg-white/5 font-bold uppercase tracking-widest">Showing 50 of ${matching.length} records. Use search to find more.</td></tr>`;
+    }
+    
+    tbody.innerHTML = html;
 };
 
 window.saveSingleMCQ = async () => {
+    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) return window.showToast("Unauthorized Access", "error");
+
     const id = document.getElementById('single-id').value;
     const q = document.getElementById('single-q').value.trim();
+    const img = document.getElementById('single-img').value.trim(); // NEW Image Input
     const a = document.getElementById('single-a').value.trim();
     const b = document.getElementById('single-b').value.trim();
     const c = document.getElementById('single-c').value.trim();
     const d = document.getElementById('single-d').value.trim();
     const corr = document.getElementById('single-corr').value;
     const sub = document.getElementById('single-sub').value.trim();
+    
     if(!q || !a || !b || !c || !d || !sub) return window.showToast("Error: All fields are required.", "error");
+    
     const btn = document.getElementById('save-mcq-btn');
     const text = document.getElementById('save-mcq-text');
-    const spinner = document.getElementById('save-mcq-spinner');
     btn.disabled = true;
     text.innerText = "Syncing...";
-    spinner.classList.remove('hidden');
-    spinner.classList.add('animate-spin');
+    
     const payload = { question: q, optA: a, optB: b, optC: c, optD: d, correct: corr, subject: sub };
+    if(img) payload.image = img;
+    
     try {
         if(id) {
             await db.collection('mcqs').doc(id).update(payload);
@@ -846,8 +934,6 @@ window.saveSingleMCQ = async () => {
     } finally {
         btn.disabled = false;
         text.innerText = "Save to Database";
-        spinner.classList.add('hidden');
-        spinner.classList.remove('animate-spin');
     }
 };
 
@@ -856,12 +942,14 @@ window.editMCQ = (id) => {
     if(!mcq) return;
     document.getElementById('single-id').value = mcq.id;
     document.getElementById('single-q').value = mcq.question;
+    document.getElementById('single-img').value = mcq.image || ''; // Populates Image if exists
     document.getElementById('single-a').value = mcq.optA;
     document.getElementById('single-b').value = mcq.optB;
     document.getElementById('single-c').value = mcq.optC;
     document.getElementById('single-d').value = mcq.optD;
     document.getElementById('single-corr').value = mcq.correct;
     document.getElementById('single-sub').value = mcq.subject;
+    
     document.getElementById('form-icon').innerText = 'edit';
     document.getElementById('form-title-text').innerText = 'Edit Database Entry';
     document.getElementById('save-mcq-text').innerText = 'Update Record';
@@ -869,7 +957,9 @@ window.editMCQ = (id) => {
 };
 
 window.deleteMCQ = async (id) => {
-    if(!confirm("CRITICAL WARNING: This will permanently delete this question from the global database. Proceed?")) return;
+    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) return window.showToast("Unauthorized", "error");
+    if(!confirm("CRITICAL WARNING: This will permanently delete this question. Proceed?")) return;
+    
     try {
         await db.collection('mcqs').doc(id).delete();
         window.SHARK.mcqs = window.SHARK.mcqs.filter(m => m.id !== id);
@@ -883,6 +973,7 @@ window.deleteMCQ = async (id) => {
 window.resetMCQForm = () => {
     document.getElementById('single-id').value = '';
     document.getElementById('single-q').value = '';
+    document.getElementById('single-img').value = '';
     document.getElementById('single-a').value = '';
     document.getElementById('single-b').value = '';
     document.getElementById('single-c').value = '';
@@ -893,52 +984,60 @@ window.resetMCQForm = () => {
     document.getElementById('save-mcq-text').innerText = 'Save to Database';
 };
 
+window.deleteAlert = async (id) => {
+    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) return;
+    if(!confirm("Delete this alert permanently?")) return;
+    
+    try {
+        await db.collection('alerts').doc(id).delete();
+        window.SHARK.alerts = window.SHARK.alerts.filter(a => a.id !== id);
+        window.showToast("Alert successfully deleted.");
+        document.getElementById('admin-content').innerHTML = window.getAdminDash(); 
+    } catch(e) {
+        window.showToast("Failed to delete alert: " + e.message, 'error');
+    }
+};
+
 window.publishAlert = async () => {
+    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) return window.showToast("Unauthorized", "error");
+
     const title = document.getElementById('alert-title').value.trim();
     const urdu = document.getElementById('alert-urdu').value.trim();
     const type = document.getElementById('alert-type').value;
     const btn = document.getElementById('publish-btn');
     const btnText = document.getElementById('publish-btn-text');
-    const spinner = document.getElementById('publish-spinner');
-    const statusMsg = document.getElementById('alert-status');
-    if(!title || !urdu) {
-        statusMsg.innerText = "Error: Please fill in both English and Urdu details.";
-        statusMsg.className = "text-xs font-bold mb-2 text-rose-500 text-center animate-fade-in block";
-        return;
-    }
+    
+    if(!title || !urdu) return window.showToast("Both English and Urdu details are required.", "error");
+
     btn.disabled = true;
     btnText.innerText = "Broadcasting...";
-    spinner.classList.add('animate-spin');
-    spinner.classList.remove('hidden');
-    statusMsg.classList.add('hidden'); 
+    
     const dateOpts = { day: 'numeric', month: 'short', year: 'numeric' };
     const formattedDate = new Date().toLocaleDateString('en-GB', dateOpts);
+    
     const data = { title: title, urdu: urdu, type: type, date: formattedDate, timestamp: firebase.firestore.FieldValue.serverTimestamp() };
+    
     try {
-        await db.collection('alerts').add(data);
-        btn.classList.replace('btn-primary', 'bg-emerald-500');
-        btn.classList.add('text-dark');
-        spinner.classList.remove('animate-spin');
-        spinner.innerText = 'check_circle';
-        btnText.innerText = "Broadcast Successful!";
-        document.getElementById('alert-title').value = '';
-        document.getElementById('alert-urdu').value = '';
+        const docRef = await db.collection('alerts').add(data);
+        window.SHARK.alerts.unshift({ id: docRef.id, ...data });
         window.showToast("Alert Broadcasted Successfully!", 'success');
-        setTimeout(() => { window.location.reload(); }, 1500);
+        document.getElementById('admin-content').innerHTML = window.getAdminDash(); 
     } catch(e) {
+        window.showToast("Database Error: " + e.message, "error");
         btn.disabled = false;
-        btnText.innerText = "Broadcast Alert";
-        spinner.classList.remove('animate-spin');
-        spinner.classList.add('hidden');
-        statusMsg.innerText = "Database Error: " + e.message;
-        statusMsg.className = "text-xs font-bold mb-2 text-rose-500 text-center animate-fade-in block";
+        btnText.innerText = "Publish Alert";
     }
 };
 
+// --- FIX 5: WINDOWS CSV CORRUPTION PROTECTION ---
 window.handleCSV = (e) => {
+    if(!window.SHARK.user || window.SHARK.user.email !== ADMIN_EMAIL) return window.showToast("Unauthorized", "error");
+    
     const file = e.target.files[0];
     if(!file) return;
-    e.target.parentElement.innerHTML = `<div class="loader-ring mx-auto mb-4"></div><p class="text-primary font-bold">Encrypting & Syncing Data...</p>`;
+    
+    window.showToast("Encrypting and Syncing CSV...", "success");
+    
     const reader = new FileReader();
     reader.onload = async (event) => {
         const text = event.target.result;
@@ -946,15 +1045,18 @@ window.handleCSV = (e) => {
         let count = 0;
         const batch = db.batch(); 
         const csvRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+        
         rows.forEach(row => {
             if(!row.trim()) return; 
-            const cols = row.split(csvRegex).map(c => c.replace(/^"|"$/g, '').trim());
+            // Removes \r \n artifacts from bad Excel saves
+            const cols = row.split(csvRegex).map(c => c.replace(/^"|"$/g, '').replace(/[\r\n]+/g, '').trim());
             if(cols.length >= 7 && cols[0]) {
                 const ref = db.collection('mcqs').doc();
                 batch.set(ref, { question: cols[0], optA: cols[1], optB: cols[2], optC: cols[3], optD: cols[4], correct: cols[5].toUpperCase(), subject: cols[6], timestamp: firebase.firestore.FieldValue.serverTimestamp() });
                 count++;
             }
         });
+        
         if(count > 0 && count <= 500) {
             try {
                 await batch.commit();
@@ -962,21 +1064,19 @@ window.handleCSV = (e) => {
                 setTimeout(() => window.location.reload(), 1500);
             } catch(error) {
                 window.showToast("Sync Error: " + error.message, 'error');
-                setTimeout(() => window.location.reload(), 1500);
             }
         } else if (count > 500) {
-            window.showToast("Please limit your CSV file to 500 questions per upload to respect Firestore Free Tier batch limits.", 'error');
-            setTimeout(() => window.location.reload(), 1500);
+            window.showToast("Please limit your CSV file to 500 questions per batch.", 'error');
         } else {
-            window.showToast("Format Error: No valid questions found. Ensure your CSV has 7 columns.", 'error');
-            setTimeout(() => window.location.reload(), 1500);
+            window.showToast("Format Error: Ensure your CSV has 7 valid columns.", 'error');
         }
+        e.target.value = ''; 
     };
     reader.readAsText(file);
 };
 
 // ==========================================
-// SILENT LEADERBOARD (NO INFINITE LOOPS)
+// LEADERBOARD SYNC
 // ==========================================
 
 async function fetchLeaderboard() {
@@ -987,6 +1087,22 @@ async function fetchLeaderboard() {
         const cont = document.getElementById("view-container");
         if(cont && (cont.innerHTML.includes("Loading Leaderboard Data") || cont.innerHTML.includes("The Hall of Fame"))) {
             cont.innerHTML = viewLeaderboard();
+        }
+
+        const adminBody = document.getElementById("admin-user-table-body");
+        if(adminBody) {
+            adminBody.innerHTML = window.SHARK.allUsers.map(u => `
+                <tr class="border-b border-white/5 hover:bg-white/5 transition-colors text-sm">
+                    <td class="py-4 px-4 flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-800 text-primary flex items-center justify-center font-bold border border-white/10">${u.name ? u.name.charAt(0) : 'U'}</div>
+                        <div><p class="font-bold text-slate-200">${u.name || 'Anonymous'}</p><p class="text-xs text-slate-500">${u.email || 'No email'}</p></div>
+                    </td>
+                    <td class="py-4 px-4 text-primary font-mono font-bold">Lvl ${u.level || Math.floor(u.xp/1000)+1}</td>
+                    <td class="py-4 px-4 font-mono text-white">${(u.xp || 0).toLocaleString()}</td>
+                    <td class="py-4 px-4 text-slate-400">${u.joinDate && u.joinDate.seconds ? new Date(u.joinDate.seconds * 1000).toLocaleDateString() : 'N/A'}</td>
+                    <td class="py-4 px-4"><span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded text-xs font-bold border border-emerald-500/20">Active</span></td>
+                </tr>
+            `).join('');
         }
     } catch(e) { console.error("Leaderboard Sync Error:", e); }
 }
@@ -1020,30 +1136,11 @@ function viewLeaderboard() {
             </div>
             ${list}
         </div>
-        ${window.SHARK.user ? `
-        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-4xl bg-gradient-to-r from-primary to-[#00f2fe] p-1 rounded-2xl shadow-[0_0_30px_rgba(13,242,242,0.3)] z-50">
-            <div class="bg-panel rounded-xl px-6 py-4 flex items-center justify-between">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full bg-dark border-2 border-primary flex items-center justify-center font-black text-primary text-xl">${window.SHARK.user.displayName?.charAt(0) || 'U'}</div>
-                    <div>
-                        <p class="font-bold text-lg"><span class="text-slate-400 text-sm mr-2">Your Profile</span> ${window.SHARK.user.displayName}</p>
-                        <p class="text-xs text-primary">Level ${window.SHARK.userData.level} • Keep grinding to climb!</p>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <p class="font-black text-2xl text-white">${window.SHARK.userData.xp.toLocaleString()} XP</p>
-                    <button onclick="window.router('vault')" class="bg-primary text-dark text-[10px] font-black uppercase px-4 py-1 rounded-full mt-1 hover:brightness-110 flex items-center gap-1">Go Practice <span class="material-symbols-outlined text-[12px]">bolt</span></button>
-                </div>
-            </div>
-        </div>` : ''}
     </div>`;
 }
 
 function populateDummyData() {
     window.SHARK.alerts = [
-        { title: "PPSC officially announced vacancies for Lecturer positions...", urdu: "پنجاب پبلک سروس کمیشن: لیکچرر کی آسامیوں کا اعلان", date: "12 Oct 2024", type: "NEW" }
-    ];
-    window.SHARK.mcqs = [
-        { subject: "Geography", question: "Which pass connects Pakistan with Afghanistan?", optA: "Khyber Pass", optB: "Bolan Pass", optC: "Gomal Pass", optD: "Lowari Pass", correct: "A" }
+        { id: 'dummy1', title: "Welcome to I-SHARK. Start your prep today.", urdu: "آئی شارک میں خوش آمدید۔ اپنی تیاری آج ہی شروع کریں۔", date: new Date().toLocaleDateString(), type: "NEW" }
     ];
 }
